@@ -1,4 +1,4 @@
-package io.vawlt;
+package io.vawlt.cauchy;
 
 /**
  * Base exception class for all Cauchy Reed-Solomon related errors

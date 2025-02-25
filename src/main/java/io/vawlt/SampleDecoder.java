@@ -1,5 +1,7 @@
 package io.vawlt;
 
+import io.vawlt.cauchy.Cauchy256;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;

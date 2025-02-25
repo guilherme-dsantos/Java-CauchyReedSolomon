@@ -1,4 +1,4 @@
-import io.vawlt.GF256;
+import io.vawlt.cauchy.GF256;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

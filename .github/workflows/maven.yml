@@ -21,7 +21,7 @@ jobs:
           cache: maven
 
       - name: Format code
-        run: mvn formatter:format
+        run: mvn net.revelc.code.formatter:formatter-maven-plugin:format
 
       - name: Build with Maven
         run: mvn -B package --file pom.xml

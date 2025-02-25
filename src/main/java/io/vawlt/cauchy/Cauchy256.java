@@ -1,4 +1,4 @@
-package io.vawlt;
+package io.vawlt.cauchy;
 
 
 import java.util.Arrays;

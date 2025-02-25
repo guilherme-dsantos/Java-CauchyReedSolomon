@@ -7,41 +7,11 @@
     <groupId>io.vawlt</groupId>
     <artifactId>JavaCRS</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.9.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>5.9.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.9.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-params</artifactId>
-            <version>5.9.2</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>5.15.2</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
+    <modules>
+        <module>src/main/java/io/vawlt/cauchy</module>
+    </modules>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -49,9 +19,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <pmdVersion>7.7.0</pmdVersion>
     </properties>
-
-
-    <!-- ... other project configuration ... -->
 
     <build>
         <plugins>
@@ -83,6 +50,7 @@
                     </dependency>
                 </dependencies>
             </plugin>
+
             <!-- Checkstyle -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -104,7 +72,6 @@
                     </execution>
                 </executions>
             </plugin>
-
 
             <!-- Code Formatter Plugin -->
             <plugin>
@@ -145,8 +112,6 @@
                 <artifactId>maven-pmd-plugin</artifactId>
                 <version>3.21.2</version>
             </plugin>
-
         </plugins>
     </reporting>
-
 </project>

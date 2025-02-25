@@ -35,6 +35,9 @@ jobs:
       - name: Run PMD
         run: mvn pmd:check
 
+      - name: Run SpotBugs
+        run: mvn spotbugs:spotbugs
+
       - name: Publish Test Report
         uses: actions/upload-artifact@v4
         if: always()

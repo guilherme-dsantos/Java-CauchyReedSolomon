@@ -1,88 +1,75 @@
 package io.vawlt;
 
-import java.util.Arrays;
+import java.util.logging.Logger;
 
 public class GF256 {
 
-    // Available generator polynomials for GF(2^8)
-    private static final int[] GF256_GEN_POLY = {
-            0x8e, 0x95, 0x96, 0xa6,
-            0xaf, 0xb1, 0xb2, 0xb4,
-            0xb8, 0xc3, 0xc6, 0xd4,
-            0xe1, 0xe7, 0xf3, 0xfa
-    };
-
-    private static final int DEFAULT_POLYNOMIAL_INDEX = 3;
-
-    // Table data
-    private int[][] GF256_MUL_TABLE;  // Multiplication table [256][256]
-    private int[][] GF256_DIV_TABLE;  // Division table [256][256]
-    private int[] GF256_INV_TABLE;    // Inverse table [256]
-    private int[] GF256_SQR_TABLE;    // Square table [256]
-    private int[] GF256_LOG_TABLE;    // Log table [256]
-    private int[] GF256_EXP_TABLE;    // Exp table [512*2+1]
-
-    // Selected polynomial
-    private int polynomial;
-
     static final int GF256_GEN_POLY_COUNT = 16;
+    // Available generator polynomials for GF(2^8)
+    private static final int[] GF256_GEN_POLY = {0x8e, 0x95, 0x96, 0xa6, 0xaf, 0xb1, 0xb2, 0xb4, 0xb8, 0xc3, 0xc6, 0xd4, 0xe1, 0xe7, 0xf3, 0xfa};
+    public static final int DEFAULT_POLYNOMIAL_INDEX = 3;
+    // Table data
+    private final int[][] gf256MulTable;  // Multiplication table [256][256]
+    private final int[][] gf256DivTable;  // Division table [256][256]
+    private final int[] gf256InvTable;    // Inverse table [256]
+    private final int[] gf256LogTable;    // Log table [256]
+    private final int[] gf256ExpTable;    // Exp table [512*2+1]
+    // Selected polynomial
+    public int polynomial;
+
+    Logger logger = Logger.getLogger(getClass().getName());
 
     public GF256() {
         try {
 
             // Mul/Div/Inv/Sqr tables
-            System.out.println("Allocating GF(256) tables...");
-            GF256_MUL_TABLE = new int[256][256];
-            GF256_DIV_TABLE = new int[256][256];
-            GF256_INV_TABLE = new int[256];
-            GF256_SQR_TABLE = new int[256];
+            logger.info("Allocating GF(256) tables...");
+            gf256MulTable = new int[256][256];
+            gf256DivTable = new int[256][256];
+            gf256InvTable = new int[256];
 
             // Log/Exp tables
-            GF256_LOG_TABLE = new int[256];
-            GF256_EXP_TABLE = new int[512 * 2 + 1];
+            gf256LogTable = new int[256];
+            gf256ExpTable = new int[512 * 2 + 1];
 
 
-            System.out.println("GF(256) tables allocated successfully");
+            logger.info("GF(256) tables allocated successfully");
         } catch (Exception e) {
-            System.err.println("Failed to allocate GF(256) tables: " + e.getMessage());
-            e.printStackTrace();
+            logger.info("Failed to allocate GF(256) tables: " + e.getMessage());
             throw e;
         }
     }
 
     /**
-            * Initialize the GF(256) tables
+     * Initialize the GF(256) tables
      *
-             * @return true on success, false on failure
+     * @return true on success, false on failure
      */
+
     public void init() {
         try {
-            System.out.println("Initializing GF(256) context...");
+            logger.info("Initializing GF(256) context...");
 
             // Set up polynomial
             polyInit(DEFAULT_POLYNOMIAL_INDEX);
-            System.out.println("Polynomial initialized: 0x" + Integer.toHexString(polynomial));
+            logger.info("Polynomial initialized: 0x" + Integer.toHexString(polynomial));
 
             // Generate exponential and log tables
             expLogInit();
-            System.out.println("Exp/Log tables initialized");
+            logger.info("Exp/Log tables initialized");
 
             // Generate multiplication and division tables
             mulDivInit();
-            System.out.println("Mul/Div tables initialized");
+            logger.info("Mul/Div tables initialized");
 
             // Generate inverse table
             invInit();
-            System.out.println("Inverse table initialized");
+            logger.info("Inverse table initialized");
 
-            // Generate square table
-            sqrInit();
-            System.out.println("Square table initialized");
 
         } catch (Exception e) {
-            System.err.println("GF256 initialization failed with exception: " + e.getMessage());
-            e.printStackTrace();
-           throw e;
+           logger.info("GF256 initialization failed with exception: " + e.getMessage());
+            throw e;
         }
     }
 
@@ -92,8 +79,7 @@ public class GF256 {
      */
 
     public void polyInit(int polynomialIndex) {
-        if (polynomialIndex < 0 || polynomialIndex >= GF256_GEN_POLY_COUNT)
-            polynomialIndex = DEFAULT_POLYNOMIAL_INDEX;
+        if (polynomialIndex < 0 || polynomialIndex >= GF256_GEN_POLY_COUNT) polynomialIndex = DEFAULT_POLYNOMIAL_INDEX;
 
         polynomial = (GF256_GEN_POLY[polynomialIndex] << 1) | 1;
     }
@@ -102,40 +88,39 @@ public class GF256 {
      * Construct EXP and LOG tables from polynomial
      */
 
-    private void expLogInit() {
+    public void expLogInit() {
         int poly = polynomial;
 
         // Initialize log table entry for 0
-        GF256_LOG_TABLE[0] = 512;
-        GF256_EXP_TABLE[0] = 1;
+        gf256LogTable[0] = 512;
+        gf256ExpTable[0] = 1;
 
         try {
             for (int jj = 1; jj < 255; ++jj) {
-                int next = GF256_EXP_TABLE[jj - 1] & 0xFF;
+                int next = gf256ExpTable[jj - 1] & 0xFF;
                 next = (next << 1);
                 if (next >= 256) {
                     next ^= poly;
                 }
 
-                GF256_EXP_TABLE[jj] = next;
-                GF256_LOG_TABLE[GF256_EXP_TABLE[jj] & 0xFF] = jj;
+                gf256ExpTable[jj] = next;
+                gf256LogTable[gf256ExpTable[jj] & 0xFF] = jj;
             }
 
-            GF256_EXP_TABLE[255] = GF256_EXP_TABLE[0];
-            GF256_LOG_TABLE[GF256_EXP_TABLE[255] & 0xFF] = 255;
+            gf256ExpTable[255] = gf256ExpTable[0];
+            gf256LogTable[gf256ExpTable[255] & 0xFF] = 255;
 
             for (int jj = 256; jj < 2 * 255; ++jj) {
-                GF256_EXP_TABLE[jj] = GF256_EXP_TABLE[jj % 255];
+                gf256ExpTable[jj] = gf256ExpTable[jj % 255];
             }
 
-            GF256_EXP_TABLE[2 * 255] = 1;
+            gf256ExpTable[2 * 255] = 1;
 
             for (int jj = 2 * 255 + 1; jj < 4 * 255; ++jj) {
-                GF256_EXP_TABLE[jj] = 0;
+                gf256ExpTable[jj] = 0;
             }
         } catch (Exception e) {
-            System.err.println("Exception in expLogInit at index: " + e.getMessage());
-            e.printStackTrace();
+            logger.info("Exception in expLogInit at index: " + e.getMessage());
             throw e;
         }
     }
@@ -144,27 +129,27 @@ public class GF256 {
      * Initialize MUL and DIV tables using LOG and EXP tables
      */
 
-    private void mulDivInit() {
+    public void mulDivInit() {
         // Set up y = 0 subtable
         for (int x = 0; x < 256; ++x) {
-            GF256_MUL_TABLE[0][x] = 0;
-            GF256_DIV_TABLE[0][x] = 0;
+            gf256MulTable[0][x] = 0;
+            gf256DivTable[0][x] = 0;
         }
 
         // For each other y value:
         for (int y = 1; y < 256; ++y) {
             // Calculate log(y) for mult and 255 - log(y) for div
             // Ensure we get positive values
-            final int logY = GF256_LOG_TABLE[y] & 0xFFFF;
+            final int logY = gf256LogTable[y] & 0xFFFF;
             final int logYn = 255 - logY;
 
             // Unroll x = 0
-            GF256_MUL_TABLE[y][0] = 0;
-            GF256_DIV_TABLE[y][0] = 0;
+            gf256MulTable[y][0] = 0;
+            gf256DivTable[y][0] = 0;
 
             // Calculate x * y, x / y
             for (int x = 1; x < 256; ++x) {
-                int logX = GF256_LOG_TABLE[x] & 0xFFFF;
+                int logX = gf256LogTable[x] & 0xFFFF;
 
                 // Ensure indices are valid
                 int mulIndex = (logX + logY) % 255;
@@ -172,8 +157,8 @@ public class GF256 {
                 int divIndex = (logX + logYn) % 255;
                 if (divIndex < 0) divIndex += 255;
 
-                GF256_MUL_TABLE[y][x] = GF256_EXP_TABLE[mulIndex] & 0xFF;
-                GF256_DIV_TABLE[y][x] = GF256_EXP_TABLE[divIndex] & 0xFF;
+                gf256MulTable[y][x] = gf256ExpTable[mulIndex] & 0xFF;
+                gf256DivTable[y][x] = gf256ExpTable[divIndex] & 0xFF;
             }
         }
     }
@@ -182,21 +167,12 @@ public class GF256 {
      * Initialize INV table using DIV table
      */
 
-    private void invInit() {
+    public void invInit() {
         for (int x = 0; x < 256; ++x) {
-            GF256_INV_TABLE[x] = div((byte)1, (byte)x) & 0xFF;
+            gf256InvTable[x] = div((byte) 1, (byte) x) & 0xFF;
         }
     }
 
-    /**
-     * Initialize SQR table using MUL table
-     */
-
-    private void sqrInit() {
-        for (int x = 0; x < 256; ++x) {
-            GF256_SQR_TABLE[x] = mul((byte)x, (byte)x) & 0xFF;
-        }
-    }
 
     //------------------------------------------------------------------------------
     // Math Operations
@@ -205,7 +181,7 @@ public class GF256 {
      * Add in GF(256): x + y
      */
     public byte add(byte x, byte y) {
-        return (byte)(x ^ y);
+        return (byte) (x ^ y);
     }
 
     /**
@@ -213,7 +189,7 @@ public class GF256 {
      * For repeated multiplication by a constant, it is faster to put the constant in y.
      */
     public byte mul(byte x, byte y) {
-        return (byte)(GF256_MUL_TABLE[y & 0xFF][x & 0xFF]);
+        return (byte) gf256MulTable[y & 0xFF][x & 0xFF];
     }
 
     /**
@@ -221,105 +197,40 @@ public class GF256 {
      * Memory-access optimized for constant divisors in y.
      */
     public byte div(byte x, byte y) {
-        return (byte)(GF256_DIV_TABLE[y & 0xFF][x & 0xFF]);
+        return (byte) gf256DivTable[y & 0xFF][x & 0xFF];
     }
 
     /**
      * Inverse in GF(256): 1 / x
      */
     public byte inv(byte x) {
-        return (byte)(GF256_INV_TABLE[x & 0xFF]);
-    }
-
-    /**
-     * Square in GF(256): x * x
-     */
-    public byte sqr(byte x) {
-        return (byte)(GF256_SQR_TABLE[x & 0xFF]);
+        return (byte) gf256InvTable[x & 0xFF];
     }
 
     //------------------------------------------------------------------------------
-    // Bulk Memory Math Operations
+    // Getters (for tests)
 
-    /**
-     * Performs "x[] += y[]" bulk memory XOR operation
-     */
-    public void addMem(byte[] x, byte[] y, int bytes) {
-        for (int i = 0; i < bytes; i++) {
-            x[i] ^= y[i];
-        }
+    public int[][] getGf256MulTable(){
+        return gf256MulTable;
     }
 
-    /**
-     * Performs "z[] += x[] + y[]" bulk memory operation
-     */
-    public void add2Mem(byte[] z, byte[] x, byte[] y, int bytes) {
-        for (int i = 0; i < bytes; i++) {
-            z[i] ^= x[i] ^ y[i];
-        }
+    public int[][] getGf256DivTable(){
+        return gf256DivTable;
     }
 
-    /**
-     * Performs "z[] = x[] + y[]" bulk memory operation
-     */
-    public void addsetMem(byte[] z, byte[] x, byte[] y, int bytes) {
-        for (int i = 0; i < bytes; i++) {
-            z[i] = (byte)(x[i] ^ y[i]);
-        }
+    public int[] getGf256InvTable(){
+        return gf256InvTable;
     }
 
-    /**
-     * Performs "z[] = x[] * y" bulk memory operation
-     */
-    public void mulMem(byte[] z, byte[] x, byte y, int bytes) {
-        // Use a single if-statement to handle special cases
-        if ((y & 0xFF) <= 1) {
-            if ((y & 0xFF) == 0) {
-                Arrays.fill(z, 0, bytes, (byte)0);
-            } else if (z != x) {
-                System.arraycopy(x, 0, z, 0, bytes);
-            }
-            return;
-        }
-
-        final int yIndex = y & 0xFF;
-
-        for (int i = 0; i < bytes; i++) {
-            // Direct calculation as a workaround
-            if ((y & 0xFF) == 0xa2 && (x[i] & 0xFF) == 0x55) {
-                z[i] = mul((byte)0xa2, (byte)0x55);
-            } else {
-                z[i] = (byte)(GF256_MUL_TABLE[yIndex][x[i] & 0xFF]);
-            }
-        }
+    public int[] getGf256LogTable(){
+        return gf256LogTable;
     }
 
-    /**
-     * Performs "z[] += x[] * y" bulk memory operation
-     */
-    public void muladdMem(byte[] z, byte y, byte[] x, int bytes) {
-        // Use a single if-statement to handle special cases
-        if (y <= 1) {
-            if (y == 1) {
-                addMem(z, x, bytes);
-            }
-            return;
-        }
-
-        final int yIndex = y & 0xFF;
-
-        for (int i = 0; i < bytes; i++) {
-            z[i] ^= (byte)(GF256_MUL_TABLE[yIndex][x[i] & 0xFF]);
-        }
+    public int[] getGf256ExpTable(){
+        return gf256ExpTable;
     }
 
-    /**
-     * Performs "x[] /= y" bulk memory operation
-     */
-    public void divMem(byte[] z, byte[] x, byte y, int bytes) {
-        // Multiply by inverse
-        mulMem(z, x, (y == 1) ? (byte)1 : (byte)(GF256_INV_TABLE[y & 0xFF]), bytes);
-    }
+
 
 
 }

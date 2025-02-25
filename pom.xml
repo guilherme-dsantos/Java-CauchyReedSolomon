@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>src/main/java/io/vawlt/cauchy</module>
+        <module>core</module>
     </modules>
 
     <properties>

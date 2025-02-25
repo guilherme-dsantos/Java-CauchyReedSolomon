@@ -1,4 +1,4 @@
-package io.vawlt.cauchy;
+package io.vawlt;
 
 import java.util.logging.Logger;
 

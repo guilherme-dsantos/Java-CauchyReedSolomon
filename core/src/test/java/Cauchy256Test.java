@@ -1,6 +1,6 @@
-import io.vawlt.cauchy.Cauchy256;
-import io.vawlt.cauchy.CauchyException;
-import io.vawlt.cauchy.GF256;
+import io.vawlt.Cauchy256;
+import io.vawlt.CauchyException;
+import io.vawlt.GF256;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;

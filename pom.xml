@@ -17,7 +17,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <pmdVersion>7.7.0</pmdVersion>
+        <pmdVersion>7.10.0</pmdVersion>
     </properties>
 
     <build>

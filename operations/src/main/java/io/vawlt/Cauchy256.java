@@ -1,24 +1,18 @@
 package io.vawlt;
 
-
 import java.util.Arrays;
 
-/**
- * Java implementation of Cauchy-Reed-Solomon erasure code in GF(256)
- */
+/** Java implementation of Cauchy-Reed-Solomon erasure code in GF(256) */
 public class Cauchy256 {
 
   // GF256 context
-  public static GF256 gf256Ctx;
+  static boolean gf256Init;
 
   public static void init() {
     try {
       // Initialize the GF(256) math context
       System.out.println("Creating GF(256) context...");
-      gf256Ctx = new GF256();
-
-      System.out.println("Initializing GF(256) context...");
-      gf256Ctx.init();
+      gf256Init = GF256.init();
 
     } catch (Exception e) {
       System.err.println("Exception during initialization: " + e.getMessage());
@@ -28,20 +22,20 @@ public class Cauchy256 {
 
   /**
    * Cauchy encode
-   * <p>
-   * This produces a set of recovery blocks that should be transmitted after the original data
+   *
+   * <p>This produces a set of recovery blocks that should be transmitted after the original data
    * blocks.
-   * <p>
-   * It takes in k equal-sized blocks and produces m equal-sized recovery blocks. The input block
+   *
+   * <p>It takes in k equal-sized blocks and produces m equal-sized recovery blocks. The input block
    * pointer array allows more natural usage of the library. The output recovery blocks are stored
    * end-to-end in the recovery_blocks.
-   * <p>
-   * The number of bytes per block (blockBytes) should be a multiple of 8.
-   * <p>
-   * The sum of k and m should be less than or equal to 256: k + m <= 256.
-   * <p>
-   * When transmitting the data, the block index of the data should be sent, and the recovery block
-   * index is also needed. The decoder should also be provided with the values of k, m, and
+   *
+   * <p>The number of bytes per block (blockBytes) should be a multiple of 8.
+   *
+   * <p>The sum of k and m should be less than or equal to 256: k + m <= 256.
+   *
+   * <p>When transmitting the data, the block index of the data should be sent, and the recovery
+   * block index is also needed. The decoder should also be provided with the values of k, m, and
    * blockBytes used for encoding.
    *
    * @param k Number of data blocks
@@ -49,11 +43,9 @@ public class Cauchy256 {
    * @param dataPtrs Array of data blocks, each of size blockBytes
    * @param recoveryBlocks Output buffer for recovery blocks (size m * blockBytes)
    * @param blockBytes Size of each block in bytes
-   * @return 0 on success, and any other code indicates failure
    */
-
-  public static void encode(int k, int m, byte[][] dataPtrs, byte[] recoveryBlocks,
-      int blockBytes) {
+  public static void encode(
+      int k, int m, byte[][] dataPtrs, byte[] recoveryBlocks, int blockBytes) {
     // Check parameters
     if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
       throw new CauchyException.InvalidParametersException(
@@ -66,7 +58,7 @@ public class Cauchy256 {
     }
 
     // Ensure that the GF256 context is initialized
-    if (gf256Ctx == null) {
+    if (!gf256Init) {
       throw new CauchyException.UninitializedContextException(
           "GF256 context not initialized. Call init() first.");
     }
@@ -96,7 +88,7 @@ public class Cauchy256 {
         // If coefficient is not 0, perform multiply-and-add
         else if (coefficient != 0) {
           for (int byteIndex = 0; byteIndex < blockBytes; byteIndex++) {
-            byte product = gf256Ctx.mul(dataPtrs[dataCol][byteIndex], coefficient);
+            byte product = GF256.mul(dataPtrs[dataCol][byteIndex], coefficient);
             recoveryBlocks[recoveryOffset + byteIndex] ^= product;
           }
         }
@@ -126,8 +118,8 @@ public class Cauchy256 {
         byte y = (byte) j;
 
         // In GF(256), the inverse of (x + y) gives us the Cauchy matrix element
-        byte sum = gf256Ctx.add(x, y);
-        matrix[i][j] = gf256Ctx.inv(sum);
+        byte sum = GF256.add(x, y);
+        matrix[i][j] = GF256.inv(sum);
       }
     }
 
@@ -136,27 +128,26 @@ public class Cauchy256 {
 
   /**
    * Cauchy decode
-   * <p>
-   * This recovers the original data from the recovery data in the provided blocks.
-   * <p>
-   * You should provide the same k, m, blockBytes values used by the encoder.
-   * <p>
-   * The blocks array contains data buffers each with blockBytes. This array allows you to arrange
-   * the blocks in memory in any way that is convenient.
-   * <p>
-   * The "row" should be set to the block index of the original data. For example the second packet
-   * should be row = 1. The "row" should be set to k + i for the i'th recovery block. For example
-   * the first recovery block row is k, and the second recovery block row is k + 1.
-   * <p>
-   * It is recommended to fill in recovery blocks at the end of the array, and filling in original
-   * data from the start. This way when the function completes, all the missing data will be
-   * clustered at the end.
+   *
+   * <p>This recovers the original data from the recovery data in the provided blocks.
+   *
+   * <p>You should provide the same k, m, blockBytes values used by the encoder.
+   *
+   * <p>The blocks array contains data buffers each with blockBytes. This array allows you to
+   * arrange the blocks in memory in any way that is convenient.
+   *
+   * <p>The "row" should be set to the block index of the original data. For example the second
+   * packet should be row = 1. The "row" should be set to k + i for the i'th recovery block. For
+   * example the first recovery block row is k, and the second recovery block row is k + 1.
+   *
+   * <p>It is recommended to fill in recovery blocks at the end of the array, and filling in
+   * original data from the start. This way when the function completes, all the missing data will
+   * be clustered at the end.
    *
    * @param k Number of data blocks
    * @param m Number of recovery blocks
    * @param blocks Array of blocks containing received data and recovery blocks
    * @param blockBytes Size of each block in bytes
-   * @return 0 on success, and any other code indicates failure
    */
   public static void decode(int k, int m, Block[] blocks, int blockBytes) {
     // Check parameters
@@ -171,7 +162,7 @@ public class Cauchy256 {
     }
 
     // Ensure that the GF256 context is initialized
-    if (gf256Ctx == null) {
+    if (!gf256Init) {
       throw new CauchyException.UninitializedContextException(
           "GF256 context not initialized. Call init() first.");
     }
@@ -198,12 +189,6 @@ public class Cauchy256 {
     // If nothing is missing, we're done
     if (missingCount == 0) {
       return;
-    }
-
-    // If we have fewer blocks than k, we can't recover
-    if (blocks.length < k) {
-      throw new CauchyException.InsufficientBlocksException(
-          "Not enough blocks provided for recovery");
     }
 
     // Find recovery blocks and build a list of available recovery rows
@@ -248,9 +233,6 @@ public class Cauchy256 {
 
     // Invert the submatrix to solve the linear system
     byte[][] invSubMatrix = invertMatrix(subMatrix);
-    if (invSubMatrix == null) {
-      throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
-    }
 
     // For each missing original block
     for (int i = 0; i < missingCount; i++) {
@@ -265,17 +247,8 @@ public class Cauchy256 {
         int recoveryRow = recoveryRows[j];
 
         // Find the recovery block in our blocks array
-        byte[] recoveryData = null;
-        for (Block block : blocks) {
-          if (block != null && block.data != null && block.row == recoveryRow + k) {
-            recoveryData = block.data;
-            break;
-          }
-        }
-
-        if (recoveryData == null) {
-          throw new CauchyException.BlockBufferException("Recovery block data unexpectedly null");
-        }
+        byte[] recoveryData =
+            getRecoveryData(blocks, recoveryRow + k, "Recovery block data unexpectedly null");
 
         // Create a temporary copy of the recovery data
         byte[] recoveryTemp = new byte[blockBytes];
@@ -285,46 +258,17 @@ public class Cauchy256 {
         for (int l = 0; l < k; l++) {
           if (!missingOriginal[l]) {
             // Find the original data
-            byte[] originalData = null;
-            for (Block block : blocks) {
-              if (block != null && block.data != null && block.row == l) {
-                originalData = block.data;
-                break;
-              }
-            }
-
-            if (originalData == null) {
-              throw new CauchyException.BlockBufferException(
-                  "Original block data unexpectedly null");
-            }
+            byte[] originalData =
+                getRecoveryData(blocks, l, "Original block data unexpectedly null");
 
             // Subtract the contribution: recovery -= original * coefficient
-            byte coefficient = cauchyMatrix[recoveryRow][l];
-            if (coefficient == 1) {
-              for (int p = 0; p < blockBytes; p++) {
-                recoveryTemp[p] ^= originalData[p];
-              }
-            } else if (coefficient != 0) {
-              for (int p = 0; p < blockBytes; p++) {
-                byte product = gf256Ctx.mul(originalData[p], coefficient);
-                recoveryTemp[p] ^= product;
-              }
-            }
+            applyInvertedMatrixCoefficient(
+                blockBytes, cauchyMatrix, recoveryRow, recoveryTemp, l, originalData);
           }
         }
 
         // Apply the inverted matrix coefficient
-        byte coefficient = invSubMatrix[i][j];
-        if (coefficient == 1) {
-          for (int p = 0; p < blockBytes; p++) {
-            tempBuffer[p] ^= recoveryTemp[p];
-          }
-        } else if (coefficient != 0) {
-          for (int p = 0; p < blockBytes; p++) {
-            byte product = gf256Ctx.mul(recoveryTemp[p], coefficient);
-            tempBuffer[p] ^= product;
-          }
-        }
+        applyInvertedMatrixCoefficient(blockBytes, invSubMatrix, i, tempBuffer, j, recoveryTemp);
       }
 
       // Find or create a block for the recovered data
@@ -345,6 +289,42 @@ public class Cauchy256 {
     }
   }
 
+  private static byte[] getRecoveryData(
+      Block[] blocks, int recoveryRow, String Recovery_block_data_unexpectedly_null) {
+    byte[] recoveryData = null;
+    for (Block block : blocks) {
+      if (block != null && block.data != null && block.row == recoveryRow) {
+        recoveryData = block.data;
+        break;
+      }
+    }
+
+    if (recoveryData == null) {
+      throw new CauchyException.BlockBufferException(Recovery_block_data_unexpectedly_null);
+    }
+    return recoveryData;
+  }
+
+  private static void applyInvertedMatrixCoefficient(
+      int blockBytes,
+      byte[][] cauchyMatrix,
+      int recoveryRow,
+      byte[] recoveryTemp,
+      int l,
+      byte[] originalData) {
+    byte coefficient = cauchyMatrix[recoveryRow][l];
+    if (coefficient == 1) {
+      for (int p = 0; p < blockBytes; p++) {
+        recoveryTemp[p] ^= originalData[p];
+      }
+    } else if (coefficient != 0) {
+      for (int p = 0; p < blockBytes; p++) {
+        byte product = GF256.mul(originalData[p], coefficient);
+        recoveryTemp[p] ^= product;
+      }
+    }
+  }
+
   /**
    * Inverts a square matrix in GF(256)
    *
@@ -354,15 +334,13 @@ public class Cauchy256 {
   private static byte[][] invertMatrix(byte[][] matrix) {
     int size = matrix.length;
     if (size == 0 || matrix[0].length != size) {
-      return null; // Not a square matrix
+      throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
     }
 
     // Create augmented matrix [A|I]
     byte[][] aug = new byte[size][size * 2];
     for (int i = 0; i < size; i++) {
-      for (int j = 0; j < size; j++) {
-        aug[i][j] = matrix[i][j];
-      }
+      System.arraycopy(matrix[i], 0, aug[i], 0, size);
       aug[i][i + size] = 1; // Identity matrix on the right
     }
 
@@ -378,7 +356,7 @@ public class Cauchy256 {
 
       // If pivot is zero, matrix is singular
       if (aug[pivotRow][i] == 0) {
-        return null;
+        throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
       }
 
       // Swap rows if needed
@@ -392,9 +370,9 @@ public class Cauchy256 {
 
       // Scale pivot row
       byte pivot = aug[i][i];
-      byte pivotInv = gf256Ctx.inv(pivot);
+      byte pivotInv = GF256.inv(pivot);
       for (int j = 0; j < size * 2; j++) {
-        aug[i][j] = gf256Ctx.mul(aug[i][j], pivotInv);
+        aug[i][j] = GF256.mul(aug[i][j], pivotInv);
       }
 
       // Eliminate other rows
@@ -402,7 +380,7 @@ public class Cauchy256 {
         if (j != i) {
           byte factor = aug[j][i];
           for (int k = 0; k < size * 2; k++) {
-            aug[j][k] ^= gf256Ctx.mul(aug[i][k], factor);
+            aug[j][k] ^= GF256.mul(aug[i][k], factor);
           }
         }
       }
@@ -411,18 +389,13 @@ public class Cauchy256 {
     // Extract inverse from augmented matrix
     byte[][] inverse = new byte[size][size];
     for (int i = 0; i < size; i++) {
-      for (int j = 0; j < size; j++) {
-        inverse[i][j] = aug[i][j + size];
-      }
+      System.arraycopy(aug[i], size, inverse[i], 0, size);
     }
 
     return inverse;
   }
 
-  /**
-   * Descriptor for received data block
-   */
-
+  /** Descriptor for received data block */
   public static class Block {
     public byte[] data;
     public byte row;

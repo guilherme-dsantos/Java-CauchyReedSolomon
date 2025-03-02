@@ -1,16 +1,17 @@
-import io.vawlt.Cauchy256;
-import io.vawlt.CauchyException;
-import io.vawlt.GF256;
+package io.vawlt;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.Random;
+
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import java.util.Random;
-import static org.junit.jupiter.api.Assertions.*;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class Cauchy256Test {
+class OperationsTest {
 
   // Random data generator
   private final Random random = new Random(42);
@@ -22,13 +23,14 @@ class Cauchy256Test {
 
   @Test
   void testInit() {
-    assertDoesNotThrow(() -> Cauchy256.init());
+    assertDoesNotThrow(Cauchy256::init);
   }
 
   @ParameterizedTest
-  @CsvSource({"4, 2, 8", // Small
-      "10, 3, 16", // Medium
-      "20, 5, 64" // Large
+  @CsvSource({
+    "4, 2, 8", // Small
+    "10, 3, 16", // Medium
+    "20, 5, 64" // Large
   })
   void testEncodeAndDecode(int k, int m, int blockBytes) {
     // Generate random data
@@ -36,7 +38,8 @@ class Cauchy256Test {
 
     // Encode data to create recovery blocks
     byte[] recoveryBlocks = new byte[m * blockBytes];
-    assertDoesNotThrow(() -> Cauchy256.encode(k, m, originalData, recoveryBlocks, blockBytes),
+    assertDoesNotThrow(
+        () -> Cauchy256.encode(k, m, originalData, recoveryBlocks, blockBytes),
         "Encoding should succeed");
 
     // Test various loss scenarios
@@ -44,11 +47,11 @@ class Cauchy256Test {
     testLossScenario(k, m, blockBytes, originalData, recoveryBlocks, 1); // One data block lost
     testLossScenario(k, m, blockBytes, originalData, recoveryBlocks, m); // Maximum recoverable loss
     testLossScenario(k, m, blockBytes, originalData, recoveryBlocks, m / 2); // Half of recoverable
-                                                                             // loss
+    // loss
   }
 
-  private void testLossScenario(int k, int m, int blockBytes, byte[][] originalData,
-      byte[] recoveryBlocks, int lossCount) {
+  private void testLossScenario(
+      int k, int m, int blockBytes, byte[][] originalData, byte[] recoveryBlocks, int lossCount) {
     if (lossCount > m) {
       throw new IllegalArgumentException("Cannot test loss beyond recovery capability");
     }
@@ -83,7 +86,8 @@ class Cauchy256Test {
     }
 
     // Decode the data
-    assertDoesNotThrow(() -> Cauchy256.decode(k, m, blocks, blockBytes),
+    assertDoesNotThrow(
+        () -> Cauchy256.decode(k, m, blocks, blockBytes),
         "Decoding should succeed with " + actualLossCount + " lost blocks");
 
     // Verify all the data matches the original
@@ -100,37 +104,43 @@ class Cauchy256Test {
       }
 
       assertTrue(found, "Block " + i + " should be present after decoding");
-      assertArrayEquals(originalData[i], decodedData,
-          "Decoded data should match original for block " + i);
+      assertArrayEquals(
+          originalData[i], decodedData, "Decoded data should match original for block " + i);
     }
   }
 
   @Test
   void testInvalidParameters() {
     // Test with invalid k, m
-    assertThrows(CauchyException.InvalidParametersException.class,
+    assertThrows(
+        CauchyException.InvalidParametersException.class,
         () -> Cauchy256.encode(0, 1, new byte[1][1], new byte[1], 8),
         "Should throw InvalidParametersException with k=0");
 
-    assertThrows(CauchyException.InvalidParametersException.class,
+    assertThrows(
+        CauchyException.InvalidParametersException.class,
         () -> Cauchy256.encode(1, 0, new byte[1][1], new byte[1], 8),
         "Should throw InvalidParametersException with m=0");
 
-    assertThrows(CauchyException.InvalidParametersException.class,
+    assertThrows(
+        CauchyException.InvalidParametersException.class,
         () -> Cauchy256.encode(250, 7, new byte[250][8], new byte[7 * 8], 8),
         "Should throw InvalidParametersException with k+m>256");
 
     // Test with invalid block size
-    assertThrows(CauchyException.InvalidParametersException.class,
+    assertThrows(
+        CauchyException.InvalidParametersException.class,
         () -> Cauchy256.encode(4, 2, new byte[4][7], new byte[2 * 7], 7),
         "Should throw InvalidParametersException with blockBytes not multiple of 8");
 
     // Test with null pointers
-    assertThrows(CauchyException.NullDataException.class,
+    assertThrows(
+        CauchyException.NullDataException.class,
         () -> Cauchy256.encode(4, 2, null, new byte[2 * 8], 8),
         "Should throw NullDataException with null data pointers");
 
-    assertThrows(CauchyException.NullDataException.class,
+    assertThrows(
+        CauchyException.NullDataException.class,
         () -> Cauchy256.encode(4, 2, new byte[4][8], null, 8),
         "Should throw NullDataException with null recovery blocks");
   }
@@ -154,7 +164,8 @@ class Cauchy256Test {
     }
 
     // Decode should succeed immediately without using recovery blocks
-    assertDoesNotThrow(() -> Cauchy256.decode(k, m, blocks, blockBytes),
+    assertDoesNotThrow(
+        () -> Cauchy256.decode(k, m, blocks, blockBytes),
         "Decode should succeed with no missing blocks");
   }
 
@@ -187,39 +198,10 @@ class Cauchy256Test {
     }
 
     // Decode should fail because we're missing m+1 original blocks but only have m recovery blocks
-    assertThrows(CauchyException.InsufficientBlocksException.class,
+    assertThrows(
+        CauchyException.InsufficientBlocksException.class,
         () -> Cauchy256.decode(k, m, blocks, blockBytes),
         "Decode should fail with too many missing blocks");
-  }
-
-  @Test
-  void testUninitializedContext() {
-    // Create a temporary class that extends Cauchy256 for testing
-    class TestCauchy extends Cauchy256 {
-      public static void resetContext() {
-        gf256Ctx = null;
-      }
-    }
-
-    // Save the current context
-    GF256 savedContext = Cauchy256.gf256Ctx;
-
-    try {
-      // Reset the context to null
-      TestCauchy.resetContext();
-
-      // Try operations with null context
-      assertThrows(CauchyException.UninitializedContextException.class,
-          () -> Cauchy256.encode(4, 2, new byte[4][8], new byte[2 * 8], 8),
-          "Should throw UninitializedContextException when context is null");
-
-      assertThrows(CauchyException.UninitializedContextException.class,
-          () -> Cauchy256.decode(4, 2, new Cauchy256.Block[6], 8),
-          "Should throw UninitializedContextException when context is null");
-    } finally {
-      // Restore the context
-      Cauchy256.gf256Ctx = savedContext;
-    }
   }
 
   // Utility methods

@@ -2,6 +2,8 @@ package io.vawlt;
 
 import java.util.logging.Logger;
 
+import io.vawlt.CauchyException.UninitializedContextException;
+
 public class GF256 {
 
   static final int GF256_GEN_POLY_COUNT = 16;
@@ -22,35 +24,31 @@ public class GF256 {
   static Logger logger = Logger.getLogger(GF256.class.getName());
 
   /** Initialize the GF(256) tables */
-  public static boolean init() {
-    try {
-      logger.info("Initializing GF(256) context...");
+  public static boolean init() throws UninitializedContextException {
 
-      // Set up polynomial
-      polyInit(DEFAULT_POLYNOMIAL_INDEX);
-      logger.info("Polynomial initialized: 0x" + Integer.toHexString(polynomial));
+    logger.info("Initializing GF(256) context...");
 
-      // Generate exponential and log tables
-      expLogInit();
-      logger.info("Exp/Log tables initialized");
+    // Set up polynomial
+    polyInit(DEFAULT_POLYNOMIAL_INDEX);
+    logger.info("Polynomial initialized: 0x" + Integer.toHexString(polynomial));
 
-      // Generate multiplication and division tables
-      mulDivInit();
-      logger.info("Mul/Div tables initialized");
+    // Generate exponential and log tables
+    expLogInit();
+    logger.info("Exp/Log tables initialized");
 
-      // Generate inverse table
-      invInit();
-      logger.info("Inverse table initialized");
+    // Generate multiplication and division tables
+    mulDivInit();
+    logger.info("Mul/Div tables initialized");
 
-      return true;
-    } catch (Exception e) {
-      logger.info("GF256 initialization failed with exception: " + e.getMessage());
-      throw e;
-    }
+    // Generate inverse table
+    invInit();
+    logger.info("Inverse table initialized");
+
+    return true;
   }
 
   /** Select which polynomial to use */
-  static void polyInit(int polynomialIndex) {
+  static void polyInit(int polynomialIndex) throws UninitializedContextException {
     if (polynomialIndex < 0 || polynomialIndex >= GF256_GEN_POLY_COUNT)
       polynomialIndex = DEFAULT_POLYNOMIAL_INDEX;
 
@@ -58,45 +56,40 @@ public class GF256 {
   }
 
   /** Construct EXP and LOG tables from polynomial */
-  static void expLogInit() {
+  static void expLogInit() throws UninitializedContextException {
     int poly = polynomial;
 
     // Initialize log table entry for 0
     gf256LogTable[0] = 512;
     gf256ExpTable[0] = 1;
 
-    try {
-      for (int jj = 1; jj < 255; ++jj) {
-        int next = gf256ExpTable[jj - 1] & 0xFF;
-        next = (next << 1);
-        if (next >= 256) {
-          next ^= poly;
-        }
-
-        gf256ExpTable[jj] = next;
-        gf256LogTable[gf256ExpTable[jj] & 0xFF] = jj;
+    for (int jj = 1; jj < 255; ++jj) {
+      int next = gf256ExpTable[jj - 1] & 0xFF;
+      next = (next << 1);
+      if (next >= 256) {
+        next ^= poly;
       }
 
-      gf256ExpTable[255] = gf256ExpTable[0];
-      gf256LogTable[gf256ExpTable[255] & 0xFF] = 255;
+      gf256ExpTable[jj] = next;
+      gf256LogTable[gf256ExpTable[jj] & 0xFF] = jj;
+    }
 
-      for (int jj = 256; jj < 2 * 255; ++jj) {
-        gf256ExpTable[jj] = gf256ExpTable[jj % 255];
-      }
+    gf256ExpTable[255] = gf256ExpTable[0];
+    gf256LogTable[gf256ExpTable[255] & 0xFF] = 255;
 
-      gf256ExpTable[2 * 255] = 1;
+    for (int jj = 256; jj < 2 * 255; ++jj) {
+      gf256ExpTable[jj] = gf256ExpTable[jj % 255];
+    }
 
-      for (int jj = 2 * 255 + 1; jj < 4 * 255; ++jj) {
-        gf256ExpTable[jj] = 0;
-      }
-    } catch (Exception e) {
-      logger.info("Exception in expLogInit at index: " + e.getMessage());
-      throw e;
+    gf256ExpTable[2 * 255] = 1;
+
+    for (int jj = 2 * 255 + 1; jj < 4 * 255; ++jj) {
+      gf256ExpTable[jj] = 0;
     }
   }
 
   /** Initialize MUL and DIV tables using LOG and EXP tables */
-  static void mulDivInit() {
+  static void mulDivInit() throws UninitializedContextException {
     // Set up y = 0 subtable
     for (int x = 0; x < 256; ++x) {
       gf256MulTable[0][x] = 0;
@@ -131,7 +124,7 @@ public class GF256 {
   }
 
   /** Initialize INV table using DIV table */
-  static void invInit() {
+  static void invInit() throws UninitializedContextException {
     for (int x = 0; x < 256; ++x) {
       gf256InvTable[x] = div((byte) 1, (byte) x) & 0xFF;
     }

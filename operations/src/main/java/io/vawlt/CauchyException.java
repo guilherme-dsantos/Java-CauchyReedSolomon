@@ -7,10 +7,6 @@ public class CauchyException extends RuntimeException {
     super(message);
   }
 
-  public CauchyException(String message, Throwable cause) {
-    super(message, cause);
-  }
-
   /** Exception thrown when invalid parameters are provided */
   public static class InvalidParametersException extends CauchyException {
     public InvalidParametersException(String message) {

@@ -2,6 +2,8 @@ package io.vawlt;
 
 import java.util.Arrays;
 
+import io.vawlt.CauchyException.UninitializedContextException;
+
 /** Java implementation of Cauchy-Reed-Solomon erasure code in GF(256) */
 public class Cauchy256 {
 
@@ -14,9 +16,8 @@ public class Cauchy256 {
       System.out.println("Creating GF(256) context...");
       gf256Init = GF256.init();
 
-    } catch (Exception e) {
-      System.err.println("Exception during initialization: " + e.getMessage());
-      throw e;
+    } catch (UninitializedContextException e) {
+      throw new UninitializedContextException(e.getMessage());
     }
   }
 

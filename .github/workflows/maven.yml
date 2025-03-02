@@ -20,14 +20,8 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build with Maven
+      - name: Build and run tests with Maven
         run: mvn clean install
-
-      - name: Run Tests
-        run: mvn test
-
-      - name: Run PMD
-        run: mvn pmd:check
 
       - name: Publish Test Report
         uses: actions/upload-artifact@v4

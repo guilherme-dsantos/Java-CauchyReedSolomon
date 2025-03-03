@@ -9,7 +9,8 @@
         <version>1.0</version>
     </parent>
 
-    <artifactId>operations</artifactId>
+    <artifactId>erasure_coding</artifactId>
+    <version>1.0</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>

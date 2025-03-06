@@ -35,7 +35,6 @@ import io.vawlt.Cauchy256;
 import io.vawlt.GF256;
 
 // Initialize the GF(256) context (only needed once)
-GF256.init();
 Cauchy256.init();
 
 // Encoding parameters

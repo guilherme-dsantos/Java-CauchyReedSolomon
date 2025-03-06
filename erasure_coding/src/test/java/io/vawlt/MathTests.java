@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class MathTests {
 
   @BeforeAll
@@ -147,7 +149,6 @@ public class MathTests {
   @DisplayName("Test inverse method with special values")
   void testInverseSpecialValues() {
     assertEquals((byte) 1, GF256.inv((byte) 1), "inv(1) is 1");
-
     byte inv255 = GF256.inv((byte) 255);
     assertEquals((byte) 1, GF256.mul(inv255, (byte) 255), "inv(255) * 255 should equal 1");
   }

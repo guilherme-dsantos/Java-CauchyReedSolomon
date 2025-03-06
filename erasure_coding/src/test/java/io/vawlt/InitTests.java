@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class InitTests {
 
   @BeforeEach
@@ -39,123 +41,69 @@ class InitTests {
   @Test
   @DisplayName("Test initialization process completes successfully")
   void testInitSuccess() {
-
     assertDoesNotThrow(Cauchy256::init);
 
     // Verify context was created
     assertTrue(Cauchy256.gf256Init);
 
-    // Verify polynomial was initialized
-    assertEquals((GF256.GF256_GEN_POLY[GF256.DEFAULT_POLYNOMIAL_INDEX] << 1) | 1, GF256.polynomial);
-  }
-
-  @Test
-  @DisplayName("Test polynomial initialization")
-  void testPolyInit() {
-    // Test with valid polynomial index
-    GF256.polyInit(3);
+    // Verify polynomial initialization
+    GF256.polyInit(3); // Test with valid polynomial index
     assertEquals((GF256.GF256_GEN_POLY[3] << 1) | 1, GF256.polynomial);
 
-    // Test with different polynomial index
-    GF256.polyInit(0);
+    GF256.polyInit(0); // Test with different polynomial index
     assertEquals((GF256.GF256_GEN_POLY[0] << 1) | 1, GF256.polynomial);
 
-    // Test with out-of-range index (should use DEFAULT_POLYNOMIAL_INDEX)
-    GF256.polyInit(-1);
+    GF256.polyInit(-1); // Test with out-of-range index (should use DEFAULT_POLYNOMIAL_INDEX)
     assertEquals((GF256.GF256_GEN_POLY[GF256.DEFAULT_POLYNOMIAL_INDEX] << 1) | 1, GF256.polynomial);
 
     GF256.polyInit(16);
     assertEquals((GF256.GF256_GEN_POLY[GF256.DEFAULT_POLYNOMIAL_INDEX] << 1) | 1, GF256.polynomial);
-  }
 
-  @Test
-  @DisplayName("Test exponential and log table initialization")
-  void testExpLogInit() {
-    // Set up the polynomial first
-    GF256.polyInit(GF256.DEFAULT_POLYNOMIAL_INDEX);
-
-    // Initialize exp/log tables
-    assertDoesNotThrow(GF256::expLogInit);
-
-    // Verify properties of the tables
+    // Verify exp/log table initialization
     int[] expTable = GF256.gf256ExpTable;
     int[] logTable = GF256.gf256LogTable;
 
-    // Check log(0) is 512
-    assertEquals(512, logTable[0]);
+    assertEquals(512, logTable[0]); // Check log(0) is 512
+    assertEquals(1, expTable[0]); // Check exp(0) = 1
+    assertEquals(expTable[0], expTable[255]); // Check exp(255) = exp(0) = 1
 
-    // Check exp(0) = 1
-    assertEquals(1, expTable[0]);
-
-    // Check exp(255) = exp(0) = 1
-    assertEquals(expTable[0], expTable[255]);
-
-    // Check the property that exp(log(x)) = x for non-zero x
-    for (int i = 1; i < 256; i++) {
+    for (int i = 1; i < 256; i++) { // Check the property that exp(log(x)) = x for non-zero x
       int logValue = logTable[i] & 0xFFFF;
       int expValue = expTable[logValue] & 0xFF;
       assertEquals(i, expValue, "exp(log(" + i + ")) should equal " + i);
     }
-  }
 
-  @Test
-  @DisplayName("Test multiplication and division table initialization")
-  void testMulDivInit() {
-    // Set up tables needed for mul/div initialization
-    GF256.polyInit(GF256.DEFAULT_POLYNOMIAL_INDEX);
-    GF256.expLogInit();
-
-    // Initialize mul/div tables
-    assertDoesNotThrow(GF256::mulDivInit);
-
+    // Verify mult/div table initialization
     int[][] mulTable = GF256.gf256MulTable;
     int[][] divTable = GF256.gf256DivTable;
 
-    // Check y=0 row in mul table (everything * 0 = 0)
-    for (int x = 0; x < 256; x++) {
+    for (int x = 0; x < 256; x++) { // Check y=0 row in mul table (everything * 0 = 0)
       assertEquals(0, mulTable[0][x]);
     }
 
-    // Check x=0 column in mul table (0 * everything = 0)
-    for (int y = 0; y < 256; y++) {
+    for (int y = 0; y < 256; y++) { // Check x=0 column in mul table (0 * everything = 0)
       assertEquals(0, mulTable[y][0]);
     }
 
-    // Check identity: x * 1 = x
-    for (int x = 0; x < 256; x++) {
+    for (int x = 0; x < 256; x++) { // Check identity: x * 1 = x
       assertEquals(x, mulTable[1][x]);
     }
 
-    // Check division by same number = 1 (for non-zero numbers)
-    for (int x = 1; x < 256; x++) {
+    for (int x = 1; x < 256; x++) { // Check division by same number = 1 (for non-zero numbers)
       assertEquals(1, divTable[x][x]);
     }
-  }
 
-  @Test
-  @DisplayName("Test inverse table initialization")
-  void testInvInit() {
-    // Set up all required tables first
-    GF256.polyInit(GF256.DEFAULT_POLYNOMIAL_INDEX);
-    GF256.expLogInit();
-    GF256.mulDivInit();
-
-    // Initialize the inverse table
-    assertDoesNotThrow(GF256::invInit);
-
+    // Verify inv table initialization
     int[] invTable = GF256.gf256InvTable;
 
-    // Inverse of 1 is 1
-    assertEquals(1, invTable[1]);
+    assertEquals(1, invTable[1]); // Inverse of 1 is 1
 
-    // x * inv(x) = 1
-    for (int x = 1; x < 256; x++) {
+    for (int x = 1; x < 256; x++) { // x * inv(x) = 1
       byte result = GF256.mul((byte) x, (byte) invTable[x]);
       assertEquals(1, result & 0xFF, "x * inv(x) should be 1 for x = " + x);
     }
 
-    // Inverse of inverse is the original number
-    for (int x = 1; x < 256; x++) {
+    for (int x = 1; x < 256; x++) { // Inverse of inverse is the original number
       int invX = invTable[x] & 0xFF;
       int invInvX = invTable[invX] & 0xFF;
       assertEquals(x, invInvX, "inv(inv(" + x + ")) should equal " + x);

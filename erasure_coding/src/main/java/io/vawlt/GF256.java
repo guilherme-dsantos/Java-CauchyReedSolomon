@@ -4,6 +4,14 @@ import java.util.logging.Logger;
 
 import io.vawlt.CauchyException.UninitializedContextException;
 
+/**
+ * Java implementation of Cauchy-Reed-Solomon erasure code in GF(256)
+ *
+ * <p>Based on the GitHub repository: longhair Repository URL: <a
+ * href="https://github.com/catid/longhair/blob/master/gf256.cpp">...</a>
+ *
+ * <p>
+ */
 public class GF256 {
 
   static final int GF256_GEN_POLY_COUNT = 16;

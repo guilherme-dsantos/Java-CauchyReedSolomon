@@ -2,7 +2,34 @@ package io.vawlt;
 
 import java.util.Arrays;
 
-/** Java implementation of Cauchy-Reed-Solomon erasure code in GF(256) */
+/**
+ * Java implementation of Cauchy-Reed-Solomon erasure code in GF(256)
+ *
+ * <p>This implementation draws inspiration from multiple sources:
+ *
+ * <p>Academic Papers: - "Optimizing Cauchy Reed-Solomon Codes for Fault-Tolerant Storage
+ * Applications" by James S. Plank and Lihao Xu (2006) - "A Tutorial on Reed-Solomon Coding for
+ * Fault-Tolerance in RAID-like Systems" by James S. Plank (1997)
+ *
+ * <p>Open Source Implementations: - Jerasure Cauchy implementation in C
+ * https://github.com/tsuraan/Jerasure - Longhair: Fast Cauchy Reed-Solomon Erasure Codes in C++
+ * https://github.com/catid/longhair
+ *
+ * <p>This is a pure Java implementation that does not rely on SIMD instructions or native code,
+ * unlike some other implementations such as Longhair. This makes it portable across all Java
+ * platforms but may not achieve the same performance as implementations that leverage
+ * hardware-specific optimizations.
+ *
+ * <p>This implementation focuses on optimization for small block sizes (<16MB) while maintaining
+ * compatibility with standard Cauchy-Reed-Solomon coding techniques. It performs operations in the
+ * Galois Field GF(256) for byte-level encoding and provides efficient recovery mechanisms for lost
+ * data blocks.
+ *
+ * <p>Key features: - Support for arbitrary k data blocks and m recovery blocks where k+m ≤ 256 -
+ * Fast matrix operations optimized for Java - Block size independence (supports any block size
+ * multiple of 8 bytes) - Robust recovery from any combination of up to m lost blocks - Platform
+ * independence without native code dependencies
+ */
 public class Cauchy256 {
 
   // GF256 context

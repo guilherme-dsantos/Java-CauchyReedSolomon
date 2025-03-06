@@ -3,7 +3,6 @@ import io.vawlt.Cauchy256;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Arrays;
 
 public class SampleDecoder {
 
@@ -47,8 +46,11 @@ public class SampleDecoder {
             System.out.println("Recovery blocks (m): " + m);
             System.out.println("Block size: " + blockSize + " bytes");
 
-            // Create blocks array
-            Cauchy256.Block[] blocks = new Cauchy256.Block[k];
+            // Create blocks array with enough space for all blocks
+            Cauchy256.Block[] blocks = new Cauchy256.Block[k + m];
+
+            // Track which data blocks we found
+            boolean[] dataBlockFound = new boolean[k];
             int blocksFound = 0;
 
             // Try to read data blocks
@@ -63,6 +65,7 @@ public class SampleDecoder {
                             if (blocks[j] == null) {
                                 blocks[j] = new Cauchy256.Block(blockData, (byte) i);
                                 blocksFound++;
+                                dataBlockFound[i] = true;
                                 System.out.println("Found data block " + i);
                                 break;
                             }
@@ -109,31 +112,38 @@ public class SampleDecoder {
             Cauchy256.decode(k, m, blocks, blockSize);
             long endTime = System.currentTimeMillis();
 
-
             System.out.println("Decoding completed in " + (endTime - startTime) + " ms");
 
             // Rebuild the file
-            byte[] reconstructedData = new byte[k * blockSize];
+            byte[] reconstructedData = new byte[originalSize];
 
-            // Sort blocks by row
-            Arrays.sort(blocks, (a, b) -> a.row - b.row);
+            // After decoding, we need to find all data blocks (rows 0 to k-1)
+            // and copy them to the right positions in the output file
+            for (int dataIndex = 0; dataIndex < k; dataIndex++) {
+                boolean found = false;
 
-            // Copy data from blocks to reconstructed data buffer
-            for (int i = 0; i < k; i++) {
-                if (blocks[i].row >= k) {
-                    System.err.println("Error: Block " + i + " has invalid row number " + blocks[i].row);
+                // Look for the block with row = dataIndex
+                for (Cauchy256.Block block : blocks) {
+                    if (block != null && block.data != null && block.row == dataIndex) {
+                        // Calculate where in the output file this block goes
+                        int copyLength = Math.min(blockSize, originalSize - dataIndex * blockSize);
+                        if (copyLength > 0) {
+                            System.arraycopy(block.data, 0, reconstructedData, dataIndex * blockSize, copyLength);
+                        }
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    System.err.println("Error: Missing data block " + dataIndex + " after decoding");
                     return;
                 }
-                System.arraycopy(blocks[i].data, 0, reconstructedData, blocks[i].row * blockSize,
-                        blockSize);
             }
-
-            // Trim to original size
-            byte[] trimmedData = Arrays.copyOf(reconstructedData, originalSize);
 
             // Write reconstructed file
             File outputFile = new File(basePath + ".reconstructed");
-            Files.write(outputFile.toPath(), trimmedData);
+            Files.write(outputFile.toPath(), reconstructedData);
 
             System.out.println("\nFile successfully reconstructed: " + outputFile.getAbsolutePath());
 
@@ -141,6 +151,5 @@ public class SampleDecoder {
             System.err.println("Error processing file: " + e.getMessage());
             e.printStackTrace();
         }
-
     }
 }

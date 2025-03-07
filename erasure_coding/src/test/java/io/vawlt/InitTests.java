@@ -109,4 +109,43 @@ class InitTests {
       assertEquals(x, invInvX, "inv(inv(" + x + ")) should equal " + x);
     }
   }
+
+  @Test
+  @DisplayName("Test with uninitialized context")
+  void testUninitializedContext() {
+    // This test requires a fresh instance to work correctly
+    // since we can't "uninitialize" the context once it's initialized
+
+    // For demonstration purposes, let's mock the scenario by temporarily
+    // forcing gf256Init to false (this is just for testing)
+    boolean originalState = Cauchy256.gf256Init;
+    try {
+      // Force uninitialized state
+      java.lang.reflect.Field field = Cauchy256.class.getDeclaredField("gf256Init");
+      field.setAccessible(true);
+      field.setBoolean(null, false);
+
+      // Now attempt operations that should fail
+      assertThrows(
+              CauchyException.UninitializedContextException.class,
+              () -> Cauchy256.encode(4, 2, new byte[4][8], new byte[2 * 8], 8),
+              "Should throw UninitializedContextException when context is not initialized");
+
+      assertThrows(
+              CauchyException.UninitializedContextException.class,
+              () -> Cauchy256.decode(4, 2, new Cauchy256.Block[6], 8),
+              "Should throw UninitializedContextException when context is not initialized");
+    } catch (Exception e) {
+      fail("Test setup failed: " + e.getMessage());
+    } finally {
+      // Restore the original state
+      try {
+        java.lang.reflect.Field field = Cauchy256.class.getDeclaredField("gf256Init");
+        field.setAccessible(true);
+        field.setBoolean(null, originalState);
+      } catch (Exception e) {
+        fail("Failed to restore original state: " + e.getMessage());
+      }
+    }
+  }
 }

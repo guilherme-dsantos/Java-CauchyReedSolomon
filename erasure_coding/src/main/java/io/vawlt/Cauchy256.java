@@ -133,11 +133,14 @@ public class Cauchy256 {
   private static byte[][] generateCauchyMatrix(int k, int m) {
     byte[][] matrix = new byte[m][k];
 
+    // First row is all 1's (for simple XOR)
+    Arrays.fill(matrix[0], (byte) 1);
+
     // For a Cauchy matrix, we need two sets of distinct elements
     // X = {x_0, x_1, ..., x_{m-1}} and Y = {y_0, y_1, ..., y_{k-1}}
     // The matrix A is defined as A_{i,j} = 1/(x_i + y_j)
 
-    for (int i = 0; i < m; i++) {
+    for (int i = 1; i < m; i++) {
       byte x = (byte) (i + k); // Starting from k to avoid overlap with Y
 
       for (int j = 0; j < k; j++) {

@@ -29,3 +29,5 @@ replay_pid*
 
 # maven
 target
+.\erasure_coding\src\test\resources\SampleFiles\*
+!.\erasure_coding\src\test\resources\SampleFiles\*.bmp

@@ -26,7 +26,7 @@ This is a pure Java implementation that does not rely on SIMD instructions or na
 
 ## Implementation Details
 
-This implementation focuses on optimization for small block sizes (<16MB) while maintaining compatibility with standard Cauchy-Reed-Solomon coding techniques. It performs operations in the Galois Field GF(256) for byte-level encoding and provides efficient recovery mechanisms for lost data blocks.
+This implementation focuses on optimization for small block sizes while maintaining compatibility with standard Cauchy-Reed-Solomon coding techniques. It performs operations in the Galois Field GF(256) for byte-level encoding and provides efficient recovery mechanisms for lost data blocks.
 
 ## Usage
 
@@ -64,7 +64,7 @@ Cauchy256.decode(k, m, blocks, blockBytes);
 
 ## Performance Considerations
 
-- Best suited for block sizes under 16MB
+- Best suited for small block sizes
 - Performance scales linearly with block size
 - The implementation is optimized for Java without native dependencies
 - For very large datasets, consider using smaller block sizes and more blocks
@@ -75,7 +75,7 @@ The implementation includes comprehensive test suites for:
 
 - Initialization and context verification
 - Galois Field mathematics (addition, multiplication, division, inverse)
-- Different file sizes from a few bytes to 16MB
+- Different file sizes
 - Various k and m configurations
 - Multiple recovery scenarios
 - Parameter validation and edge cases

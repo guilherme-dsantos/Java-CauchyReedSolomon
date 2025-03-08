@@ -127,14 +127,14 @@ class InitTests {
 
       // Now attempt operations that should fail
       assertThrows(
-              CauchyException.UninitializedContextException.class,
-              () -> Cauchy256.encode(4, 2, new byte[4][8], new byte[2 * 8], 8),
-              "Should throw UninitializedContextException when context is not initialized");
+          CauchyException.UninitializedContextException.class,
+          () -> Cauchy256.encode(4, 2, new byte[4][8], new byte[2 * 8], 8),
+          "Should throw UninitializedContextException when context is not initialized");
 
       assertThrows(
-              CauchyException.UninitializedContextException.class,
-              () -> Cauchy256.decode(4, 2, new Cauchy256.Block[6], 8),
-              "Should throw UninitializedContextException when context is not initialized");
+          CauchyException.UninitializedContextException.class,
+          () -> Cauchy256.decode(4, 2, new Cauchy256.Block[6], 8),
+          "Should throw UninitializedContextException when context is not initialized");
     } catch (Exception e) {
       fail("Test setup failed: " + e.getMessage());
     } finally {

@@ -1,6 +1,25 @@
+/**
+ * Copyright (c) 2025 Guilherme Santos.
+ * Copyright (c) 2014 Christopher A. Taylor.  All rights reserved.
+ * <p>
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.vawlt;
 
 import java.util.Arrays;
+
 
 import static io.vawlt.Cauchy256Tables.*;
 
@@ -8,12 +27,6 @@ public class Cauchy256 {
 
     // GF256 context initialization flag
     static boolean gf256Init;
-
-    private static final int STRIDE_2 = 254;
-    private static final int STRIDE_3 = 253;
-    private static final int STRIDE_4 = 252;
-    private static final int STRIDE_5 = 251;
-    private static final int STRIDE_6 = 250;
 
     public static void init() {
         try {
@@ -53,7 +66,7 @@ public class Cauchy256 {
         }
 
         // Calculate block sub-bytes (used for bit-level operations)
-        final int subbytes = blockBytes / 8;
+        final int subBytes = blockBytes / 8;
 
         // Clear recovery blocks
         Arrays.fill(recoveryBlocks, (byte)0);
@@ -92,13 +105,13 @@ public class Cauchy256 {
 
                 // Process using bit-level operations like in C++ version
                 for (int bitY = 0; bitY < 8; bitY++) {
-                    int destOffset = recoveryOffset + bitY * subbytes;
+                    int destOffset = recoveryOffset + bitY * subBytes;
 
                     for (int bitX = 0; bitX < 8; bitX++) {
                         if ((slice & (1 << bitX)) != 0) {
-                            int srcOffset = bitX * subbytes;
+                            int srcOffset = bitX * subBytes;
 
-                            for (int j = 0; j < subbytes; j++) {
+                            for (int j = 0; j < subBytes; j++) {
                                 recoveryBlocks[destOffset + j] ^= data[i][srcOffset + j];
                             }
                         }
@@ -118,19 +131,19 @@ public class Cauchy256 {
         if (row == 0) {
             // First row is all 1's for simple XOR
             return 1;
-        } else if (row == 1 && col < STRIDE_2) {
+        } else if (row == 1 && col < 254) {
             // Second row from pre-computed table
             return CAUCHY_MATRIX_2[col];
-        } else if (row == 2 && col < STRIDE_3) {
+        } else if (row == 2 && col < 253) {
             // Third row from pre-computed table
             return CAUCHY_MATRIX_3[col];
-        } else if (row == 3 && col < STRIDE_4) {
+        } else if (row == 3 && col < 252) {
             // Fourth row from pre-computed table
             return CAUCHY_MATRIX_4[col];
-        } else if (row == 4 && col < STRIDE_5) {
+        } else if (row == 4 && col < 251) {
             // Fifth row from pre-computed table
             return CAUCHY_MATRIX_5[col];
-        } else if (row == 5 && col < STRIDE_6) {
+        } else if (row == 5 && col < 250) {
             // Sixth row from pre-computed table
             return CAUCHY_MATRIX_6[col];
         } else {
@@ -164,7 +177,7 @@ public class Cauchy256 {
         }
 
         // Calculate block sub-bytes (used for bit-level operations)
-        final int subbytes = blockBytes / 8;
+        final int subBytes = blockBytes / 8;
 
         // Track which original blocks are missing
         boolean[] missingOriginal = new boolean[k];
@@ -266,7 +279,7 @@ public class Cauchy256 {
         if (missingCount == 2 && recoveryCount >= 2 &&
                 recoveryRows[0] == 0 && recoveryRows[1] == 1) {
             // Direct 2x2 recovery is faster than general case
-            recoverTwoBlocks(blocks, k, blockBytes, subbytes, missingIndices, recoveryBlocks);
+            recoverTwoBlocks(blocks, k, blockBytes, subBytes, missingIndices, recoveryBlocks);
             return;
         }
 
@@ -307,13 +320,13 @@ public class Cauchy256 {
                             byte slice = coefficient;
 
                             for (int bitY = 0; bitY < 8; bitY++) {
-                                int destOffset = bitY * subbytes;
+                                int destOffset = bitY * subBytes;
 
                                 for (int bitX = 0; bitX < 8; bitX++) {
                                     if ((slice & (1 << bitX)) != 0) {
-                                        int srcOffset = bitX * subbytes;
+                                        int srcOffset = bitX * subBytes;
 
-                                        for (int p = 0; p < subbytes; p++) {
+                                        for (int p = 0; p < subBytes; p++) {
                                             recoveryData[i][destOffset + p] ^= originalData[srcOffset + p];
                                         }
                                     }
@@ -355,13 +368,13 @@ public class Cauchy256 {
                     byte slice = coefficient;
 
                     for (int bitY = 0; bitY < 8; bitY++) {
-                        int destOffset = bitY * subbytes;
+                        int destOffset = bitY * subBytes;
 
                         for (int bitX = 0; bitX < 8; bitX++) {
                             if ((slice & (1 << bitX)) != 0) {
-                                int srcOffset = bitX * subbytes;
+                                int srcOffset = bitX * subBytes;
 
-                                for (int p = 0; p < subbytes; p++) {
+                                for (int p = 0; p < subBytes; p++) {
                                     missingData[destOffset + p] ^= recoveryData[j][srcOffset + p];
                                 }
                             }
@@ -544,7 +557,6 @@ public class Cauchy256 {
      * Inverts a square matrix in GF(256)
      */
     private static byte[][] invertMatrix(byte[][] matrix) {
-        // Your existing implementation is already good
         int size = matrix.length;
         if (size == 0 || matrix[0].length != size) {
             throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");

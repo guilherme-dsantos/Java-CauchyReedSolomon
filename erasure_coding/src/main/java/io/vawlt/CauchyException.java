@@ -48,4 +48,5 @@ public class CauchyException extends RuntimeException {
       super(message);
     }
   }
+
 }

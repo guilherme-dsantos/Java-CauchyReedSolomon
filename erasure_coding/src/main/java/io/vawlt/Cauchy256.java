@@ -15,18 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package io.vawlt;
 
 import java.util.Arrays;
 
-/**
- * Java implementation of Cauchy-Reed-Solomon erasure code in GF(256)
- *
- * @author Guilherme Santos
- */
+
+import static io.vawlt.Cauchy256Tables.*;
+
 public class Cauchy256 {
 
-    // GF256 context
+    // GF256 context initialization flag
     static boolean gf256Init;
 
     public static void init() {
@@ -34,46 +33,29 @@ public class Cauchy256 {
             // Initialize the GF(256) math context
             System.out.println("Creating GF(256) context...");
             gf256Init = GF256.init();
-
         } catch (CauchyException.UninitializedContextException e) {
             throw new CauchyException.UninitializedContextException(e.getMessage());
         }
     }
 
     /**
-     * Cauchy encode
+     * Encodes data using Cauchy Reed-Solomon
      *
-     * <p>This produces a set of recovery blocks that should be transmitted after the original data
-     * blocks.
-     *
-     * <p>It takes in k equal-sized blocks and produces m equal-sized recovery blocks. The input block
-     * pointer array allows more natural usage of the library. The output recovery blocks are stored
-     * end-to-end in the recovery_blocks.
-     *
-     * <p>The number of bytes per block (blockBytes) should be a multiple of 8.
-     *
-     * <p>The sum of k and m should be less than or equal to 256: k + m <= 256.
-     *
-     * <p>When transmitting the data, the block index of the data should be sent, and the recovery
-     * block index is also needed. The decoder should also be provided with the values of k, m, and
-     * blockBytes used for encoding.
-     *
-     * @param k              Number of data blocks
-     * @param m              Number of recovery blocks
-     * @param dataPtrs       Array of data blocks, each of size blockBytes
-     * @param recoveryBlocks Output buffer for recovery blocks (size m * blockBytes)
-     * @param blockBytes     Size of each block in bytes
+     * @param k Number of original data blocks
+     * @param m Number of recovery blocks to generate
+     * @param data Original data blocks (size k)
+     * @param recoveryBlocks Output buffer for recovery blocks (size m*blockBytes)
+     * @param blockBytes Size of each block in bytes
      */
-    public static void encode(
-            int k, int m, byte[][] dataPtrs, byte[] recoveryBlocks, int blockBytes) {
+    public static void encode(int k, int m, byte[][] data, byte[] recoveryBlocks, int blockBytes) {
         // Check parameters
         if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
             throw new CauchyException.InvalidParametersException(
                     "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
         }
 
-        // Check data pointer validity
-        if (dataPtrs == null || recoveryBlocks == null) {
+        // Check data pointers
+        if (data == null || recoveryBlocks == null) {
             throw new CauchyException.NullDataException("Data pointers or recovery blocks are null");
         }
 
@@ -83,94 +65,98 @@ public class Cauchy256 {
                     "GF256 context not initialized. Call init() first.");
         }
 
-        // Generate the Cauchy matrix for encoding
-        byte[][] cauchyMatrix = generateCauchyMatrix(k, m);
+        // Calculate block sub-bytes (used for bit-level operations)
+        final int subBytes = blockBytes / 8;
 
-        // Clear the recovery blocks
-        Arrays.fill(recoveryBlocks, (byte) 0);
+        // Clear recovery blocks
+        Arrays.fill(recoveryBlocks, (byte)0);
 
-        // Perform the matrix multiplication to compute the recovery blocks
-        for (int recoveryRow = 0; recoveryRow < m; recoveryRow++) {
-            // Get the starting offset for this recovery block
-            int recoveryOffset = recoveryRow * blockBytes;
+        // First recovery block - simple XOR of all data blocks
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < blockBytes; j++) {
+                recoveryBlocks[j] ^= data[i][j];
+            }
+        }
+
+        // If only one recovery block needed, we're done
+        if (m == 1) {
+            return;
+        }
+
+        // For each additional recovery block
+        for (int recoveryIdx = 1; recoveryIdx < m; recoveryIdx++) {
+            int recoveryOffset = recoveryIdx * blockBytes;
 
             // For each data block
-            for (int dataCol = 0; dataCol < k; dataCol++) {
-                // Get the matrix coefficient
-                byte coefficient = cauchyMatrix[recoveryRow][dataCol];
+            for (int i = 0; i < k; i++) {
+                // Get the appropriate matrix coefficient
+                byte slice = getCauchyMatrixElement(recoveryIdx, i, k);
 
-                // If coefficient is 1, we can just XOR without multiplication
-                if (coefficient == 1) {
-                    for (int byteIndex = 0; byteIndex < blockBytes; byteIndex++) {
-                        recoveryBlocks[recoveryOffset + byteIndex] ^= dataPtrs[dataCol][byteIndex];
+                // Skip if coefficient is 0
+                if (slice == 0) continue;
+
+                // Special case for coefficient = 1
+                if (slice == 1) {
+                    for (int j = 0; j < blockBytes; j++) {
+                        recoveryBlocks[recoveryOffset + j] ^= data[i][j];
                     }
+                    continue;
                 }
-                // If coefficient is not 0, perform multiply-and-add
-                else if (coefficient != 0) {
-                    for (int byteIndex = 0; byteIndex < blockBytes; byteIndex++) {
-                        byte product = GF256.mul(dataPtrs[dataCol][byteIndex], coefficient);
-                        recoveryBlocks[recoveryOffset + byteIndex] ^= product;
+
+                // Process using bit-level operations like in C++ version
+                for (int bitY = 0; bitY < 8; bitY++) {
+                    int destOffset = recoveryOffset + bitY * subBytes;
+
+                    for (int bitX = 0; bitX < 8; bitX++) {
+                        if ((slice & (1 << bitX)) != 0) {
+                            int srcOffset = bitX * subBytes;
+
+                            for (int j = 0; j < subBytes; j++) {
+                                recoveryBlocks[destOffset + j] ^= data[i][srcOffset + j];
+                            }
+                        }
                     }
+
+                    // Calculate next slice (multiply by 2 in GF(256))
+                    slice = GF256.mul(slice, (byte)2);
                 }
-                // If coefficient is 0, skip this data block (nothing to add)
             }
         }
     }
 
     /**
-     * Generates a Cauchy matrix for the encoding process
-     *
-     * @param k Number of data blocks (columns)
-     * @param m Number of recovery blocks (rows)
-     * @return A Cauchy matrix of size m x k
+     * Gets an element from the Cauchy matrix, using pre-computed tables when available
      */
-    private static byte[][] generateCauchyMatrix(int k, int m) {
-        byte[][] matrix = new byte[m][k];
-
-        // First row is all 1's (for simple XOR)
-        Arrays.fill(matrix[0], (byte) 1);
-
-        // For a Cauchy matrix, we need two sets of distinct elements
-        // X = {x_0, x_1, ..., x_{m-1}} and Y = {y_0, y_1, ..., y_{k-1}}
-        // The matrix A is defined as A_{i,j} = 1/(x_i + y_j)
-
-        for (int i = 1; i < m; i++) {
-            byte x = (byte) (i + k); // Starting from k to avoid overlap with Y
-
-            for (int j = 0; j < k; j++) {
-                byte y = (byte) j;
-
-                // In GF(256), the inverse of (x + y) gives us the Cauchy matrix element
-                byte sum = GF256.add(x, y);
-                matrix[i][j] = GF256.inv(sum);
-            }
+    private static byte getCauchyMatrixElement(int row, int col, int k) {
+        if (row == 0) {
+            // First row is all 1's for simple XOR
+            return 1;
+        } else if (row == 1 && col < 254) {
+            // Second row from pre-computed table
+            return CAUCHY_MATRIX_2[col];
+        } else if (row == 2 && col < 253) {
+            // Third row from pre-computed table
+            return CAUCHY_MATRIX_3[col];
+        } else if (row == 3 && col < 252) {
+            // Fourth row from pre-computed table
+            return CAUCHY_MATRIX_4[col];
+        } else if (row == 4 && col < 251) {
+            // Fifth row from pre-computed table
+            return CAUCHY_MATRIX_5[col];
+        } else if (row == 5 && col < 250) {
+            // Sixth row from pre-computed table
+            return CAUCHY_MATRIX_6[col];
+        } else {
+            // For other rows, calculate dynamically
+            byte x = (byte)(row + k); // Starting from k to avoid overlap with Y
+            byte y = (byte)col;
+            byte sum = GF256.add(x, y);
+            return GF256.inv(sum);
         }
-
-        return matrix;
     }
 
     /**
-     * Cauchy decode
-     *
-     * <p>This recovers the original data from the recovery data in the provided blocks.
-     *
-     * <p>You should provide the same k, m, blockBytes values used by the encoder.
-     *
-     * <p>The blocks array contains data buffers each with blockBytes. This array allows you to
-     * arrange the blocks in memory in any way that is convenient.
-     *
-     * <p>The "row" should be set to the block index of the original data. For example the second
-     * packet should be row = 1. The "row" should be set to k + i for the i'th recovery block. For
-     * example the first recovery block row is k, and the second recovery block row is k + 1.
-     *
-     * <p>It is recommended to fill in recovery blocks at the end of the array, and filling in
-     * original data from the start. This way when the function completes, all the missing data will
-     * be clustered at the end.
-     *
-     * @param k          Number of data blocks
-     * @param m          Number of recovery blocks
-     * @param blocks     Array of blocks containing received data and recovery blocks
-     * @param blockBytes Size of each block in bytes
+     * Decodes blocks using Cauchy Reed-Solomon
      */
     public static void decode(int k, int m, Block[] blocks, int blockBytes) {
         // Check parameters
@@ -179,7 +165,7 @@ public class Cauchy256 {
                     "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
         }
 
-        // Check data pointer validity
+        // Check blocks array
         if (blocks == null || blocks.length < k) {
             throw new CauchyException.NullDataException("Blocks array is null or too short");
         }
@@ -190,7 +176,10 @@ public class Cauchy256 {
                     "GF256 context not initialized. Call init() first.");
         }
 
-        // Track which original data blocks are missing
+        // Calculate block sub-bytes (used for bit-level operations)
+        final int subBytes = blockBytes / 8;
+
+        // Track which original blocks are missing
         boolean[] missingOriginal = new boolean[k];
         int missingCount = 0;
 
@@ -214,13 +203,66 @@ public class Cauchy256 {
             return;
         }
 
+        // Special case: single missing block with first recovery block available
+        if (missingCount == 1) {
+            int missingRow = -1;
+            for (int i = 0; i < k; i++) {
+                if (missingOriginal[i]) {
+                    missingRow = i;
+                    break;
+                }
+            }
+
+            // Find the first recovery block (k)
+            Block recoveryBlock = null;
+            for (Block block : blocks) {
+                if (block != null && block.data != null && block.row == k) {
+                    recoveryBlock = block;
+                    break;
+                }
+            }
+
+            if (recoveryBlock != null) {
+                // Fast path for single missing block - just XOR recovery with available blocks
+                byte[] missingData = new byte[blockBytes];
+                System.arraycopy(recoveryBlock.data, 0, missingData, 0, blockBytes);
+
+                // XOR all available original blocks
+                for (Block block : blocks) {
+                    if (block != null && block.data != null && block.row < k && block.row != missingRow) {
+                        for (int j = 0; j < blockBytes; j++) {
+                            missingData[j] ^= block.data[j];
+                        }
+                    }
+                }
+
+                // Add recovered block directly
+                addRecoveredBlock(blocks, missingData, (byte)missingRow);
+                return;
+            }
+        }
+
+        // Get the list of missing original indices
+        int[] missingIndices = new int[missingCount];
+        int missingIndex = 0;
+        for (int i = 0; i < k; i++) {
+            if (missingOriginal[i]) {
+                missingIndices[missingIndex++] = i;
+            }
+        }
+
         // Find recovery blocks and build a list of available recovery rows
         int[] recoveryRows = new int[m];
+        Block[] recoveryBlocks = new Block[m];
         int recoveryCount = 0;
 
         for (Block block : blocks) {
             if (block != null && block.data != null && block.row >= k && block.row < k + m) {
-                recoveryRows[recoveryCount++] = block.row - k;
+                int recoveryIndex = block.row - k;
+                recoveryRows[recoveryCount] = recoveryIndex;
+                recoveryBlocks[recoveryCount] = block;
+                recoveryCount++;
+
                 if (recoveryCount >= missingCount) {
                     break; // We have enough recovery blocks
                 }
@@ -233,126 +275,286 @@ public class Cauchy256 {
                     "Not enough recovery blocks to restore missing data");
         }
 
-        // Get the list of missing original indices
-        int[] missingIndices = new int[missingCount];
-        int missingIndex = 0;
-        for (int i = 0; i < k; i++) {
-            if (missingOriginal[i]) {
-                missingIndices[missingIndex++] = i;
-            }
+        // OPTIMIZATION: Special case for exactly two missing blocks and both recovery blocks available
+        if (missingCount == 2 && recoveryCount >= 2 &&
+                recoveryRows[0] == 0 && recoveryRows[1] == 1) {
+            // Direct 2x2 recovery is faster than general case
+            recoverTwoBlocks(blocks, k, blockBytes, subBytes, missingIndices, recoveryBlocks);
+            return;
         }
 
-        // Generate the Cauchy matrix
-        byte[][] cauchyMatrix = generateCauchyMatrix(k, m);
+        // General case: solve system of linear equations
+        // Create coefficient matrix for the system
+        byte[][] coeffMatrix = new byte[missingCount][missingCount];
+        byte[][] recoveryData = new byte[missingCount][blockBytes];
 
-        // Create a submatrix containing just the needed coefficients
-        // (Recovery rows needed vs. missing columns)
-        byte[][] subMatrix = new byte[missingCount][missingCount];
+        // For each recovery block we're using
         for (int i = 0; i < missingCount; i++) {
-            for (int j = 0; j < missingCount; j++) {
-                subMatrix[i][j] = cauchyMatrix[recoveryRows[i]][missingIndices[j]];
-            }
-        }
+            int recoveryRow = recoveryRows[i];
 
-        // Invert the submatrix to solve the linear system
-        byte[][] invSubMatrix = invertMatrix(subMatrix);
+            // Copy recovery data
+            System.arraycopy(recoveryBlocks[i].data, 0, recoveryData[i], 0, blockBytes);
 
-        // For each missing original block
-        for (int i = 0; i < missingCount; i++) {
-            int missingCol = missingIndices[i];
+            // Subtract out contribution from available original blocks
+            for (int j = 0; j < k; j++) {
+                if (!missingOriginal[j]) {
+                    // Find this original block
+                    byte[] originalData = null;
+                    for (Block block : blocks) {
+                        if (block != null && block.data != null && block.row == j) {
+                            originalData = block.data;
+                            break;
+                        }
+                    }
 
-            // Create a temporary buffer for computing the missing block
-            byte[] tempBuffer = new byte[blockBytes];
-            Arrays.fill(tempBuffer, (byte) 0);
+                    if (originalData != null) {
+                        byte coefficient = getCauchyMatrixElement(recoveryRow, j, k);
 
-            // For each recovery row we're using
-            for (int j = 0; j < missingCount; j++) {
-                int recoveryRow = recoveryRows[j];
-
-                // Find the recovery block in our blocks array
-                byte[] recoveryData =
-                        getRecoveryData(blocks, recoveryRow + k, "Recovery block data unexpectedly null");
-
-                // Create a temporary copy of the recovery data
-                byte[] recoveryTemp = new byte[blockBytes];
-                System.arraycopy(recoveryData, 0, recoveryTemp, 0, blockBytes);
-
-                // Subtract out the contribution from available original data blocks
-                for (int l = 0; l < k; l++) {
-                    if (!missingOriginal[l]) {
-                        // Find the original data
-                        byte[] originalData =
-                                getRecoveryData(blocks, l, "Original block data unexpectedly null");
-
-                        // Subtract the contribution: recovery -= original * coefficient
-                        byte coefficient = cauchyMatrix[recoveryRow][l];
                         if (coefficient == 1) {
+                            // Simple XOR for coefficient=1
                             for (int p = 0; p < blockBytes; p++) {
-                                recoveryTemp[p] ^= originalData[p];
+                                recoveryData[i][p] ^= originalData[p];
                             }
                         } else if (coefficient != 0) {
-                            for (int p = 0; p < blockBytes; p++) {
-                                byte product = GF256.mul(originalData[p], coefficient);
-                                recoveryTemp[p] ^= product;
+                            // Bit-level approach for other coefficients
+                            byte slice = coefficient;
+
+                            for (int bitY = 0; bitY < 8; bitY++) {
+                                int destOffset = bitY * subBytes;
+
+                                for (int bitX = 0; bitX < 8; bitX++) {
+                                    if ((slice & (1 << bitX)) != 0) {
+                                        int srcOffset = bitX * subBytes;
+
+                                        for (int p = 0; p < subBytes; p++) {
+                                            recoveryData[i][destOffset + p] ^= originalData[srcOffset + p];
+                                        }
+                                    }
+                                }
+
+                                // Next slice
+                                slice = GF256.mul(slice, (byte)2);
                             }
                         }
                     }
                 }
+            }
 
-                // Apply the inverted matrix coefficient
-                byte coefficient = invSubMatrix[i][j];
+            // Build the coefficient matrix for missing blocks
+            for (int j = 0; j < missingCount; j++) {
+                coeffMatrix[i][j] = getCauchyMatrixElement(recoveryRow, missingIndices[j], k);
+            }
+        }
+
+        // Invert the coefficient matrix
+        byte[][] invMatrix = invertMatrix(coeffMatrix);
+
+        // For each missing block
+        for (int i = 0; i < missingCount; i++) {
+            int missingRow = missingIndices[i];
+            byte[] missingData = new byte[blockBytes];
+
+            // Apply the inverted matrix to recovery data to solve for missing block
+            for (int j = 0; j < missingCount; j++) {
+                byte coefficient = invMatrix[i][j];
+
                 if (coefficient == 1) {
+                    // Simple XOR for coefficient=1
                     for (int p = 0; p < blockBytes; p++) {
-                        tempBuffer[p] ^= recoveryTemp[p];
+                        missingData[p] ^= recoveryData[j][p];
                     }
                 } else if (coefficient != 0) {
-                    for (int p = 0; p < blockBytes; p++) {
-                        byte product = GF256.mul(recoveryTemp[p], coefficient);
-                        tempBuffer[p] ^= product;
+                    // Bit-level approach for other coefficients
+                    byte slice = coefficient;
+
+                    for (int bitY = 0; bitY < 8; bitY++) {
+                        int destOffset = bitY * subBytes;
+
+                        for (int bitX = 0; bitX < 8; bitX++) {
+                            if ((slice & (1 << bitX)) != 0) {
+                                int srcOffset = bitX * subBytes;
+
+                                for (int p = 0; p < subBytes; p++) {
+                                    missingData[destOffset + p] ^= recoveryData[j][srcOffset + p];
+                                }
+                            }
+                        }
+
+                        // Next slice
+                        slice = GF256.mul(slice, (byte)2);
                     }
                 }
-
             }
 
-            // Find or create a block for the recovered data
-            boolean blockFound = false;
-            for (int j = 0; j < blocks.length; j++) {
-                if (blocks[j] == null || blocks[j].data == null) {
-                    blocks[j] = new Block(new byte[blockBytes], (byte) missingCol);
-                    System.arraycopy(tempBuffer, 0, blocks[j].data, 0, blockBytes);
-                    blockFound = true;
-                    break;
-                }
-            }
-
-            if (!blockFound) {
-                throw new CauchyException.BlockBufferException(
-                        "No space in blocks array for recovered data");
-            }
+            // Add recovered block
+            addRecoveredBlock(blocks, missingData, (byte)missingRow);
         }
     }
 
-    private static byte[] getRecoveryData(
-            Block[] blocks, int recoveryRow, String Recovery_block_data_unexpectedly_null) {
-        byte[] recoveryData = null;
-        for (Block block : blocks) {
-            if (block != null && block.data != null && block.row == recoveryRow) {
-                recoveryData = block.data;
+    /**
+     * Optimized method to recover exactly two missing blocks
+     */
+    private static void recoverTwoBlocks(
+            Block[] blocks, int k, int blockBytes, int subbytes,
+            int[] missingIndices, Block[] recoveryBlocks) {
+
+        // Create a 2x2 matrix for the system of equations
+        byte[][] matrix = new byte[2][2];
+        matrix[0][0] = 1;  // First recovery block, first missing block
+        matrix[0][1] = 1;  // First recovery block, second missing block
+        matrix[1][0] = getCauchyMatrixElement(1, missingIndices[0], k);  // Second recovery block, first missing
+        matrix[1][1] = getCauchyMatrixElement(1, missingIndices[1], k);  // Second recovery block, second missing
+
+        // Invert the 2x2 matrix (special-cased for performance)
+        byte det = GF256.add(
+                GF256.mul(matrix[0][0], matrix[1][1]),
+                GF256.mul(matrix[0][1], matrix[1][0])
+        );
+        byte invDet = GF256.inv(det);
+
+        byte[][] invMatrix = new byte[2][2];
+        invMatrix[0][0] = GF256.mul(matrix[1][1], invDet);
+        invMatrix[0][1] = GF256.mul(matrix[0][1], invDet);
+        invMatrix[1][0] = GF256.mul(matrix[1][0], invDet);
+        invMatrix[1][1] = GF256.mul(matrix[0][0], invDet);
+
+        // Process recovery blocks to remove contribution from available blocks
+        byte[][] recoveryData = new byte[2][blockBytes];
+
+        for (int i = 0; i < 2; i++) {
+            // Copy recovery data
+            System.arraycopy(recoveryBlocks[i].data, 0, recoveryData[i], 0, blockBytes);
+
+            // Subtract contribution from available original blocks
+            for (int j = 0; j < k; j++) {
+                if (j != missingIndices[0] && j != missingIndices[1]) {
+                    // Find original block
+                    for (Block block : blocks) {
+                        if (block != null && block.data != null && block.row == j) {
+                            // Apply coefficient to original data
+                            byte coefficient = (i == 0) ? (byte)1 : getCauchyMatrixElement(1, j, k);
+
+                            if (coefficient == 1) {
+                                // Simple XOR
+                                for (int p = 0; p < blockBytes; p++) {
+                                    recoveryData[i][p] ^= block.data[p];
+                                }
+                            } else if (coefficient != 0) {
+                                // Use bit-level operations
+                                byte slice = coefficient;
+                                for (int bitY = 0; bitY < 8; bitY++) {
+                                    int destOffset = bitY * subbytes;
+
+                                    for (int bitX = 0; bitX < 8; bitX++) {
+                                        if ((slice & (1 << bitX)) != 0) {
+                                            int srcOffset = bitX * subbytes;
+
+                                            for (int p = 0; p < subbytes; p++) {
+                                                recoveryData[i][destOffset + p] ^= block.data[srcOffset + p];
+                                            }
+                                        }
+                                    }
+
+                                    // Next slice
+                                    slice = GF256.mul(slice, (byte)2);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Now recoveryData[0] and recoveryData[1] contain linear combinations of missing blocks
+        // Apply inverse matrix to solve for missing blocks
+        for (int i = 0; i < 2; i++) {
+            byte[] missingData = new byte[blockBytes];
+
+            // Apply first coefficient from inverse matrix
+            byte coef1 = invMatrix[i][0];
+            if (coef1 == 1) {
+                // Simple XOR
+                for (int j = 0; j < blockBytes; j++) {
+                    missingData[j] ^= recoveryData[0][j];
+                }
+            } else if (coef1 != 0) {
+                // Use bit-level operations
+                byte slice = coef1;
+                for (int bitY = 0; bitY < 8; bitY++) {
+                    int destOffset = bitY * subbytes;
+
+                    for (int bitX = 0; bitX < 8; bitX++) {
+                        if ((slice & (1 << bitX)) != 0) {
+                            int srcOffset = bitX * subbytes;
+
+                            for (int j = 0; j < subbytes; j++) {
+                                missingData[destOffset + j] ^= recoveryData[0][srcOffset + j];
+                            }
+                        }
+                    }
+
+                    // Next slice
+                    slice = GF256.mul(slice, (byte)2);
+                }
+            }
+
+            // Apply second coefficient from inverse matrix
+            byte coef2 = invMatrix[i][1];
+            if (coef2 == 1) {
+                // Simple XOR
+                for (int j = 0; j < blockBytes; j++) {
+                    missingData[j] ^= recoveryData[1][j];
+                }
+            } else if (coef2 != 0) {
+                // Use bit-level operations
+                byte slice = coef2;
+                for (int bitY = 0; bitY < 8; bitY++) {
+                    int destOffset = bitY * subbytes;
+
+                    for (int bitX = 0; bitX < 8; bitX++) {
+                        if ((slice & (1 << bitX)) != 0) {
+                            int srcOffset = bitX * subbytes;
+
+                            for (int j = 0; j < subbytes; j++) {
+                                missingData[destOffset + j] ^= recoveryData[1][srcOffset + j];
+                            }
+                        }
+                    }
+
+                    // Next slice
+                    slice = GF256.mul(slice, (byte)2);
+                }
+            }
+
+            // Add the recovered block
+            addRecoveredBlock(blocks, missingData, (byte)missingIndices[i]);
+        }
+    }
+
+
+    /**
+     * Add a recovered block to the blocks array
+     */
+    private static void addRecoveredBlock(Block[] blocks, byte[] data, byte row) {
+        boolean blockFound = false;
+        for (int j = 0; j < blocks.length; j++) {
+            if (blocks[j] == null || blocks[j].data == null) {
+                blocks[j] = new Block(data, row);
+                blockFound = true;
                 break;
             }
         }
 
-        if (recoveryData == null) {
-            throw new CauchyException.BlockBufferException(Recovery_block_data_unexpectedly_null);
+        if (!blockFound) {
+            throw new CauchyException.BlockBufferException(
+                    "No space in blocks array for recovered data");
         }
-        return recoveryData;
     }
+
 
     /**
      * Inverts a square matrix in GF(256)
-     *
-     * @param matrix The square matrix to invert
-     * @return The inverted matrix, or null if the matrix is not invertible
      */
     private static byte[][] invertMatrix(byte[][] matrix) {
         int size = matrix.length;
@@ -419,7 +621,7 @@ public class Cauchy256 {
     }
 
     /**
-     * Descriptor for received data block
+     * Block class for data storage
      */
     public static class Block {
         public byte[] data;

@@ -4,8 +4,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 
-public class SampleEncoder {
+public class SampleEncoderSpeed {
 
     public static void main(String[] args) {
         if (args.length < 1) {
@@ -19,6 +20,9 @@ public class SampleEncoder {
         String filePath = args[0];
         int k = (args.length > 1) ? Integer.parseInt(args[1]) : 4;
         int m = (args.length > 2) ? Integer.parseInt(args[2]) : 2;
+        int threads = (args.length > 3) ? Integer.parseInt(args[3]) : Runtime.getRuntime().availableProcessors();
+        int iterations = (args.length > 4) ? Integer.parseInt(args[4]) : 5000;
+        int warmupIterations = (args.length > 6) ? Integer.parseInt(args[6]) : 500;
 
         // Initialize the Cauchy256 library
         Cauchy256.init();
@@ -60,12 +64,29 @@ public class SampleEncoder {
             // Create recovery blocks
             byte[] recoveryBlocks = new byte[m * blockSize];
 
-            // Encode
-            long startTime = System.currentTimeMillis();
-            Cauchy256.encode(k, m, dataBlocks, recoveryBlocks, blockSize);
-            long endTime = System.currentTimeMillis();
+            final int finalBlocksize = blockSize;
 
-            System.out.println("Encoding completed in " + (endTime - startTime) + " ms");
+            CountDownLatch c = new CountDownLatch(threads);
+
+            // Encode
+            for(int t=0; t < threads; t++) {
+                new Thread(() -> {
+                    for(int i = 0; i < warmupIterations; i++) {
+                        Cauchy256.encode(k, m, dataBlocks, recoveryBlocks, finalBlocksize);
+                    }
+                    long startTime = System.currentTimeMillis();
+                    for(int i = 0; i < iterations; i++) {
+                        Cauchy256.encode(k, m, dataBlocks, recoveryBlocks, finalBlocksize);
+                    }
+                    long endTime = System.currentTimeMillis();
+                    System.out.println("Encoding completed in " + (endTime - startTime) + " ms");
+                    c.countDown();
+                }).start();
+
+            }
+
+
+            c.await();
 
             // Write data blocks and recovery blocks to files
             String baseName = inputFile.getName();
@@ -99,6 +120,8 @@ public class SampleEncoder {
 
         } catch (IOException e) {
             System.err.println("Error processing file: " + e.getMessage());
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 }

@@ -34,7 +34,7 @@ public class GF256 {
     static final int[] GF256_GEN_POLY = {
             0x8e, 0x95, 0x96, 0xa6, 0xaf, 0xb1, 0xb2, 0xb4, 0xb8, 0xc3, 0xc6, 0xd4, 0xe1, 0xe7, 0xf3, 0xfa
     };
-    static final int DEFAULT_POLYNOMIAL_INDEX = 3;
+    static final int DEFAULT_POLYNOMIAL_INDEX = 9;
     // Table data
     static final int[][] gf256MulTable = new int[256][256]; // Multiplication table [256][256]
     static final int[][] gf256DivTable = new int[256][256]; // Division table [256][256]

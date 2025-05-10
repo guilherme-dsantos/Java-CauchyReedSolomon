@@ -1,7 +1,14 @@
+/**
+ * Optimal improved Cauchy matrices for some small values of m
+ * All credits to:
+ * Copyright (c) 2014 Christopher A. Taylor.  All rights reserved.
+ * https://github.com/catid/longhair/blob/master/cauchy_tables_256.inc
+ */
+
 package io.vawlt;
 
 public class Cauchy256Tables {
-    // Optimal improved Cauchy matrices for some small values of m
+
 
     static final byte[] CAUCHY_MATRIX_2 = {
             1, (byte) 195, 2, 4, (byte) 162, 81, 8, (byte) 194, 3, 97, 6, (byte) 163, 5, 10, 12, 20, 80, 40, (byte) 235, 16,
@@ -223,43 +230,4 @@ public class Cauchy256Tables {
             (byte) 213, (byte) 173, 115, 55, (byte) 134, (byte) 135, 46, 110, (byte) 236, 104
     };
 
-    /*
-     * The following constants represent the Cauchy matrix Y and X values.
-     * In the original C code, these are used to reconstruct the remaining
-     * optimal matrices for larger values of m.
-     */
-    static final byte[] CAUCHY_MATRIX_Y = {
-            (byte) 194, 3, (byte) 163, 5, 9, 80, (byte) 130, (byte) 131, 64, (byte) 128, (byte) 226, (byte) 221, 111, 54, 62, 127, 126, (byte) 179, (byte) 234, (byte) 255, (byte) 253,
-            17, 88, 122, (byte) 238, (byte) 217, 55, (byte) 132, 26, (byte) 207, 33, (byte) 181, 109, 102, 49, 25, (byte) 183, (byte) 140, (byte) 247, (byte) 190, 76,
-            (byte) 157, 79, 38, (byte) 154, (byte) 228, 106, 91, 13, (byte) 155, 7, (byte) 218, 105, (byte) 215, (byte) 173, 31, (byte) 209, (byte) 176, (byte) 248, 117, (byte) 175,
-            (byte) 208, 65, (byte) 156, 42, 87, (byte) 222, (byte) 143, 61, 44, 115, 90, 56, (byte) 178, (byte) 241, 86, (byte) 170, 116, (byte) 214, (byte) 212, 36, 97,
-            (byte) 197, (byte) 211, (byte) 229, (byte) 235, 82, 121, 99, 75, (byte) 246, 70, (byte) 233, 48, 104, 14, (byte) 169, (byte) 213, (byte) 185, (byte) 149, 52, (byte) 193,
-            95, 74, 107, (byte) 151, 40, 53, 67, (byte) 168, 46, 32, 2, 93, (byte) 174, 6, 83, (byte) 202, (byte) 232, (byte) 138, 84, 59, (byte) 167, (byte) 188,
-            (byte) 150, 34, (byte) 239, 28, (byte) 133, 24, 47, (byte) 210, (byte) 165, (byte) 189, (byte) 144, (byte) 171, (byte) 216, 85, (byte) 137, (byte) 206, (byte) 129, (byte) 224, (byte) 231,
-            (byte) 182, 16, 15, 20, (byte) 166, (byte) 135, 71, (byte) 227, 43, 51, 27, (byte) 204, (byte) 200, (byte) 164, (byte) 225, 22, (byte) 254, (byte) 252, 112, 69, 35,
-            (byte) 145, 101, 66, 78, (byte) 195, 73, 45, 12, 37, (byte) 153, 89, 120, (byte) 250, (byte) 142, 57, (byte) 159, 113, 23, 124, (byte) 243, 98,
-            (byte) 191, (byte) 201, (byte) 177, 29, (byte) 141, 110, (byte) 223, 118, 19, 119, (byte) 196, 77, 68, 114, 94, (byte) 134, (byte) 245, (byte) 158, 58, (byte) 186,
-            96, (byte) 160, 10, (byte) 152, 8, (byte) 237, (byte) 230, (byte) 136, (byte) 251, (byte) 146, (byte) 249, (byte) 139, (byte) 199, (byte) 184, 123, 18, 39, 72, (byte) 203, (byte) 148,
-            60, (byte) 240, 100, (byte) 147, (byte) 198, (byte) 244, (byte) 242, 125, (byte) 220, (byte) 205, (byte) 180, (byte) 236, (byte) 172, 63, 103, 30, 50, 92, (byte) 187,
-            108, (byte) 161, (byte) 162, (byte) 219, (byte) 192, 81, 41, 4, 11, 21
-    };
-
-    /*
-     * For CAUCHY_MATRIX_X, this is a very large array in the original C code
-     * that contains the X values for matrices with m=7 through m=255
-     * For brevity, I've included only the beginning portion here.
-     * In a real implementation, you would want to include the full array
-     * or implement the reconstruction algorithm.
-     */
-    static final byte[] CAUCHY_MATRIX_X = {
-            88, 49, 27, 7, (byte) 166, 118, 21, 45, 96, (byte) 142, 41, (byte) 134, (byte) 229, (byte) 211, (byte) 196, 47, 121, (byte) 128, (byte) 193, 15,
-            64, 89, (byte) 176, 33, 92, (byte) 215, (byte) 177, 14, 98, (byte) 137, (byte) 181, (byte) 202, 112, 44, 99, 120, (byte) 144, 22, 42, (byte) 131,
-            (byte) 156, (byte) 221, (byte) 248, 57, 11, 16, 56, (byte) 147, (byte) 232, (byte) 253, (byte) 183, 53, (byte) 179, (byte) 191, (byte) 209, 2, 62, (byte) 225, 68, (byte) 224,
-            25, 61, (byte) 190, (byte) 240, 67, 85, (byte) 159, (byte) 162, (byte) 169, (byte) 192, (byte) 251, 111, 127, (byte) 164, (byte) 188, (byte) 189, (byte) 214, (byte) 236, 36, 48,
-            (byte) 146, (byte) 158, (byte) 231, (byte) 233, (byte) 235, 58, 76, (byte) 153, (byte) 197, 4, 28, 101, (byte) 154, (byte) 200, (byte) 242, 71, (byte) 132, (byte) 237, 66, (byte) 130,
-            (byte) 155, (byte) 171, (byte) 244, 32, 87, (byte) 170, (byte) 201, (byte) 223, (byte) 168, (byte) 195, (byte) 206, (byte) 217, (byte) 245, 46, 107, 126, (byte) 255, 50, 84, 122,
-            (byte) 151, (byte) 184, (byte) 254, 59, 65, 79, 81, 82, 116, (byte) 165, (byte) 174, 43, 95, 123, (byte) 175, (byte) 208, 90, 119, (byte) 210, 54, 69, 77,
-            100, (byte) 143, (byte) 145, (byte) 161, (byte) 204, 51, 72, (byte) 139, (byte) 173, (byte) 218, 83, 86, 103, 106, (byte) 182, (byte) 207, 74, (byte) 167, (byte) 198, 10, 19,
-            /* ... many more entries would follow for a complete implementation ... */
-    };
 }

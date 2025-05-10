@@ -2,6 +2,7 @@ package io.vawlt;
 
 import java.util.Arrays;
 
+
 import static io.vawlt.Cauchy256Tables.*;
 
 public class Cauchy256 {
@@ -41,10 +42,6 @@ public class Cauchy256 {
                     "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
         }
 
-        if (k == 2 && m == 4) {  // Only for the problematic case
-            printEncodingMatrix(k, m);
-        }
-
         // Check data pointers
         if (data == null || recoveryBlocks == null) {
             throw new CauchyException.NullDataException("Data pointers or recovery blocks are null");
@@ -57,7 +54,7 @@ public class Cauchy256 {
         }
 
         // Calculate block sub-bytes (used for bit-level operations)
-        final int subbytes = blockBytes / 8;
+        final int subBytes = blockBytes / 8;
 
         // Clear recovery blocks
         Arrays.fill(recoveryBlocks, (byte)0);
@@ -81,7 +78,7 @@ public class Cauchy256 {
             // For each data block
             for (int i = 0; i < k; i++) {
                 // Get the appropriate matrix coefficient
-                byte slice = getCauchyMatrixElement(recoveryIdx, i, k,m);
+                byte slice = getCauchyMatrixElement(recoveryIdx, i, k, m);
 
                 // Skip if coefficient is 0
                 if (slice == 0) continue;
@@ -96,14 +93,14 @@ public class Cauchy256 {
 
                 // Process using bit-level operations like in C++ version
                 for (int bitY = 0; bitY < 8; bitY++) {
-                    int destOffset = recoveryOffset + bitY * subbytes;
+                    int destOffset = recoveryOffset + bitY * subBytes;
 
                     int sliceValue = slice & 0xFF;
                     for (int bitX = 0; bitX < 8; bitX++) {
                         if ((sliceValue & (1 << bitX)) != 0) {
-                            int srcOffset = bitX * subbytes;
+                            int srcOffset = bitX * subBytes;
 
-                            for (int j = 0; j < subbytes; j++) {
+                            for (int j = 0; j < subBytes; j++) {
                                 recoveryBlocks[destOffset + j] ^= data[i][srcOffset + j];
                             }
                         }
@@ -139,7 +136,7 @@ public class Cauchy256 {
         }
 
         // Calculate block sub-bytes (used for bit-level operations)
-        final int subbytes = blockBytes / 8;
+        final int subBytes = blockBytes / 8;
 
         // Track which original blocks are missing
         boolean[] missingOriginal = new boolean[k];
@@ -226,7 +223,6 @@ public class Cauchy256 {
                 recoveryCount++;
 
                 if (recoveryCount >= missingCount) {
-                    System.out.println("Recovery count: " + recoveryCount);
                     break; // We have enough recovery blocks
                 }
             }
@@ -239,10 +235,9 @@ public class Cauchy256 {
         }
 
         // OPTIMIZATION: Special case for exactly two missing blocks and both recovery blocks available
-        if (missingCount == 2 && recoveryCount >= 2 &&
-                recoveryRows[0] == 0 && recoveryRows[1] == 1) {
+        if (missingCount == 2 && recoveryRows[0] == 0 && recoveryRows[1] == 1) {
             // Direct 2x2 recovery is faster than general case
-            recoverTwoBlocks(blocks, k, m, blockBytes, subbytes, missingIndices, recoveryBlocks);
+            recoverTwoBlocks(blocks, k, m,  blockBytes, subBytes, missingIndices, recoveryBlocks);
             return;
         }
 
@@ -283,13 +278,13 @@ public class Cauchy256 {
                             int sliceValue = coefficient & 0xFF; // Convert to unsigned int
 
                             for (int bitY = 0; bitY < 8; bitY++) {
-                                int destOffset = bitY * subbytes;
+                                int destOffset = bitY * subBytes;
 
                                 for (int bitX = 0; bitX < 8; bitX++) {
                                     if ((sliceValue & (1 << bitX)) != 0) {
-                                        int srcOffset = bitX * subbytes;
+                                        int srcOffset = bitX * subBytes;
 
-                                        for (int p = 0; p < subbytes; p++) {
+                                        for (int p = 0; p < subBytes; p++) {
                                             recoveryData[i][destOffset + p] ^= originalData[srcOffset + p];
                                         }
                                     }
@@ -335,13 +330,13 @@ public class Cauchy256 {
                     int sliceValue = coefficient & 0xFF; // Convert to unsigned int
 
                     for (int bitY = 0; bitY < 8; bitY++) {
-                        int destOffset = bitY * subbytes;
+                        int destOffset = bitY * subBytes;
 
                         for (int bitX = 0; bitX < 8; bitX++) {
                             if ((sliceValue & (1 << bitX)) != 0) {
-                                int srcOffset = bitX * subbytes;
+                                int srcOffset = bitX * subBytes;
 
-                                for (int p = 0; p < subbytes; p++) {
+                                for (int p = 0; p < subBytes; p++) {
                                     missingData[destOffset + p] ^= recoveryData[j][srcOffset + p];
                                 }
                             }
@@ -529,6 +524,7 @@ public class Cauchy256 {
      * Inverts a square matrix in GF(256)
      */
     private static byte[][] invertMatrix(byte[][] matrix) {
+        // Your existing implementation is already good
         int size = matrix.length;
         if (size == 0 || matrix[0].length != size) {
             throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
@@ -591,7 +587,6 @@ public class Cauchy256 {
                 }
             }
 
-            System.out.println(Arrays.deepToString(matrix));
             // If pivot is zero, matrix is singular
             if (pivotRow == -1) {
                 throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");

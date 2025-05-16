@@ -3,8 +3,6 @@ package io.vawlt;
 import java.util.Arrays;
 
 
-import static io.vawlt.Cauchy256Tables.*;
-
 public class Cauchy256 {
 
     // GF256 context initialization flag
@@ -19,7 +17,6 @@ public class Cauchy256 {
     public static void init() {
         try {
             // Initialize the GF(256) math context
-            System.out.println("Creating GF(256) context...");
             gf256Init = GF256.init();
         } catch (CauchyException.UninitializedContextException e) {
             throw new CauchyException.UninitializedContextException(e.getMessage());
@@ -39,7 +36,7 @@ public class Cauchy256 {
         // Check parameters
         if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
             throw new CauchyException.InvalidParametersException(
-                    "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
+                    "Invalid parameters: k=%d, m=%d, blockBytes=%d".formatted(k, m, blockBytes));
         }
 
         // Check data pointers
@@ -121,7 +118,7 @@ public class Cauchy256 {
         // Check parameters
         if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
             throw new CauchyException.InvalidParametersException(
-                    "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
+                    "Invalid parameters: k=%d, m=%d, blockBytes=%d".formatted(k, m, blockBytes));
         }
 
         // Check blocks array
@@ -295,7 +292,6 @@ public class Cauchy256 {
                             }
                         }
 
-                        System.out.println(Arrays.toString(originalData));
                     }
                 }
             }
@@ -538,20 +534,12 @@ public class Cauchy256 {
             byte c = matrix[1][0];
             byte d = matrix[1][1];
 
-            // Print debug info
-            System.out.println("Inverting 2x2 matrix with unsigned values:");
-            System.out.println("[" + (a & 0xFF) + ", " + (b & 0xFF) + "]");
-            System.out.println("[" + (c & 0xFF) + ", " + (d & 0xFF) + "]");
-
             // Calculate determinant: ad-bc in GF(256)
             // In GF(256), subtraction is the same as addition (XOR)
             byte det = GF256.add(
                     GF256.mul(a, d),
                     GF256.mul(b, c)
             );
-
-            // Debug info for determinant
-            System.out.println("Determinant (unsigned): " + (det & 0xFF));
 
             // Check for singularity with unsigned comparison
             if ((det & 0xFF) == 0) {
@@ -632,107 +620,137 @@ public class Cauchy256 {
 
     /**
      * Gets an element from the Cauchy matrix, using pre-computed tables when available
-    */
-    private static byte getCauchyMatrixElement(int row, int col, int k, int m) {
+     * @param row Row index (0-based)
+     * @param col Column index (0-based)
+     * @param k Number of original data blocks
+     * @param m Number of recovery blocks
+     * @return The Cauchy matrix element at the specified position
+     * @throws IllegalArgumentException if the parameters are invalid or the element cannot be retrieved
+     */
+    private static byte getCauchyMatrixElement(int row, int col, int k, int m) throws IllegalArgumentException {
+        // Validate input parameters
+        if (row < 0 || col < 0 || k <= 0 || m <= 0 || k + m > 256) {
+            throw new IllegalArgumentException(
+                    "Invalid parameters: row=%d, col=%d, k=%d, m=%d".formatted(row, col, k, m));
+        }
+
+        // Ensure row and column are within bounds
+        if (row >= m) {
+            throw new IllegalArgumentException(
+                    "Row index %d is out of bounds for matrix with %d rows".formatted(row, m));
+        }
+
+        if (col >= k) {
+            throw new IllegalArgumentException(
+                    "Column index %d is out of bounds for matrix with %d columns".formatted(col, k));
+        }
+
         // First row is all 1's for simple XOR
         if (row == 0) {
             return 1;
-        } else if (row >= 1 && row < m && m <= 6) {
-            // Get the reference to the appropriate precomputed matrix
+        }
+
+        // Handle precomputed tables for m ≤ 6
+        if (m <= 6) {
             byte[] matrixData;
             int stride = switch (m) {
                 case 2 -> {
-                    matrixData = CAUCHY_MATRIX_2;
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_2;
                     yield STRIDE_2;
                 }
                 case 3 -> {
-                    matrixData = CAUCHY_MATRIX_3;
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_3;
                     yield STRIDE_3;
                 }
                 case 4 -> {
-                    matrixData = CAUCHY_MATRIX_4;
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_4;
                     yield STRIDE_4;
                 }
                 case 5 -> {
-                    matrixData = CAUCHY_MATRIX_5;
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_5;
                     yield STRIDE_5;
                 }
                 case 6 -> {
-                    matrixData = CAUCHY_MATRIX_6;
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_6;
                     yield STRIDE_6;
                 }
-                default -> throw new IllegalArgumentException("Unexpected value for m: " + m);
+                default ->
+                    // Shouldn't happen due to previous check, but handle for completeness
+                        throw new IllegalArgumentException("Unexpected value for m: %d".formatted(m));
             };
 
-            // Ensure col is valid before accessing
-            if (col < k) {
-                // Calculate the index in the precomputed matrix
-                int index = switch (row) {
-                    case 1 -> col;
-                    case 2 -> stride + col;
-                    case 3 -> stride * 2 + col;
-                    case 4 -> stride * 3 + col;
-                    case 5 -> stride * 4 + col;
-                    default -> throw new IllegalArgumentException("Unexpected value for row: " + row);
-                };
+            // Select the appropriate precomputed matrix and stride
 
-                // Check if the index is within bounds of the array
-                if (index < matrixData.length) {
-                    return matrixData[index];
-                }
+            // Calculate the index in the precomputed matrix
+            int index = switch (row) {
+                case 1 -> col;
+                case 2 -> stride + col;
+                case 3 -> stride * 2 + col;
+                case 4 -> stride * 3 + col;
+                case 5 -> stride * 4 + col;
+                default -> throw new IllegalArgumentException("Unexpected value for row: %d".formatted(row));
+            };
+
+            // Check if the index is within bounds of the array
+            if (index < 0 || index >= matrixData.length) {
+                throw new IllegalArgumentException(
+                        "Index %d out of bounds for matrix data with length %d".formatted(index, matrixData.length));
             }
+
+            return matrixData[index];
+        }
+        // Handle dynamically constructed matrix for m > 6
+        else {
+            throw new IllegalArgumentException(
+                    "Invalid value of m (should be m <= 6): %d".formatted(m));
         }
 
-        // If we reach here, we couldn't get the value from precomputed tables
-        throw new IllegalArgumentException(
-                "Matrix element not available in precomputed tables: " +
-                        "row=" + row + ", col=" + col + ", k=" + k + ", m=" + m);
     }
 
-    public static void printEncodingMatrix(int k, int m) {
-        System.out.println("Cauchy Encoding Matrix for k=" + k + ", m=" + m + ":");
-
-        // Print header
-        System.out.print("    ");
-        for (int col = 0; col < k; col++) {
-            System.out.printf("Col%-2d ", col);
-        }
-        System.out.println();
-
-        // First row is special - all 1's
-        System.out.print("Row0 ");
-        for (int col = 0; col < k; col++) {
-            System.out.printf("%-5d ", 1);
-        }
-        System.out.println();
-
-        // Print remaining rows
-        for (int row = 1; row < m; row++) {
-            System.out.printf("Row%-1d ", row);
-            for (int col = 0; col < k; col++) {
-                byte element = getCauchyMatrixElement(row, col, k, m);
-                System.out.printf("0x%-3X ", element & 0xFF);
-            }
-            System.out.println();
-        }
-
-        System.out.println("\nMatrix element details:");
-        for (int row = 0; row < m; row++) {
-            for (int col = 0; col < k; col++) {
-                byte element = getCauchyMatrixElement(row, col, k, m);
-
-                // Also calculate the dynamic version for comparison
-                byte x = (byte) (row + k);
-                byte y = (byte) col;
-                byte sum = GF256.add(x, y);
-                byte dynamicElement = GF256.inv(sum);
-
-                System.out.printf("Element[%d][%d]: Table=0x%X, Dynamic=0x%X, Match=%b%n",
-                        row, col, element & 0xFF, dynamicElement & 0xFF,
-                        element == dynamicElement);
-            }
-        }
-    }
+//    public static void printEncodingMatrix(int k, int m) {
+//        System.out.printf("Cauchy Encoding Matrix for k=%d, m=%d:%n", k, m);
+//
+//        // Print header
+//        System.out.print("    ");
+//        for (int col = 0; col < k; col++) {
+//            System.out.printf("Col%-2d ", col);
+//        }
+//        System.out.println();
+//
+//        // First row is special - all 1's
+//        System.out.print("Row0 ");
+//        for (int col = 0; col < k; col++) {
+//            System.out.printf("%-5d ", 1);
+//        }
+//        System.out.println();
+//
+//        // Print remaining rows
+//        for (int row = 1; row < m; row++) {
+//            System.out.printf("Row%-1d ", row);
+//            for (int col = 0; col < k; col++) {
+//                byte element = getCauchyMatrixElement(row, col, k, m);
+//                System.out.printf("0x%-3X ", element & 0xFF);
+//            }
+//            System.out.println();
+//        }
+//
+//        System.out.println("\nMatrix element details:");
+//        for (int row = 0; row < m; row++) {
+//            for (int col = 0; col < k; col++) {
+//                byte element = getCauchyMatrixElement(row, col, k, m);
+//
+//                // Also calculate the dynamic version for comparison
+//                byte x = (byte) (row + k);
+//                byte y = (byte) col;
+//                byte sum = GF256.add(x, y);
+//                byte dynamicElement = GF256.inv(sum);
+//
+//                System.out.printf("Element[%d][%d]: Table=0x%X, Dynamic=0x%X, Match=%b%n",
+//                        row, col, element & 0xFF, dynamicElement & 0xFF,
+//                        element == dynamicElement);
+//            }
+//        }
+//    }
 
     /**
      * Block class for data storage

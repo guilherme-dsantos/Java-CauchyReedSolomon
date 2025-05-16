@@ -21,17 +21,20 @@ package io.vawlt;
 import java.util.Arrays;
 
 
-import static io.vawlt.Cauchy256Tables.*;
-
 public class Cauchy256 {
 
     // GF256 context initialization flag
     static boolean gf256Init;
 
+    private static final int STRIDE_2 = 254;
+    private static final int STRIDE_3 = 253;
+    private static final int STRIDE_4 = 252;
+    private static final int STRIDE_5 = 251;
+    private static final int STRIDE_6 = 250;
+
     public static void init() {
         try {
             // Initialize the GF(256) math context
-            System.out.println("Creating GF(256) context...");
             gf256Init = GF256.init();
         } catch (CauchyException.UninitializedContextException e) {
             throw new CauchyException.UninitializedContextException(e.getMessage());
@@ -51,7 +54,7 @@ public class Cauchy256 {
         // Check parameters
         if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
             throw new CauchyException.InvalidParametersException(
-                    "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
+                    "Invalid parameters: k=%d, m=%d, blockBytes=%d".formatted(k, m, blockBytes));
         }
 
         // Check data pointers
@@ -90,7 +93,7 @@ public class Cauchy256 {
             // For each data block
             for (int i = 0; i < k; i++) {
                 // Get the appropriate matrix coefficient
-                byte slice = getCauchyMatrixElement(recoveryIdx, i, k);
+                byte slice = getCauchyMatrixElement(recoveryIdx, i, k, m);
 
                 // Skip if coefficient is 0
                 if (slice == 0) continue;
@@ -107,8 +110,9 @@ public class Cauchy256 {
                 for (int bitY = 0; bitY < 8; bitY++) {
                     int destOffset = recoveryOffset + bitY * subBytes;
 
+                    int sliceValue = slice & 0xFF;
                     for (int bitX = 0; bitX < 8; bitX++) {
-                        if ((slice & (1 << bitX)) != 0) {
+                        if ((sliceValue & (1 << bitX)) != 0) {
                             int srcOffset = bitX * subBytes;
 
                             for (int j = 0; j < subBytes; j++) {
@@ -118,40 +122,10 @@ public class Cauchy256 {
                     }
 
                     // Calculate next slice (multiply by 2 in GF(256))
-                    slice = GF256.mul(slice, (byte)2);
+                    sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
+                    slice = (byte)sliceValue;
                 }
             }
-        }
-    }
-
-    /**
-     * Gets an element from the Cauchy matrix, using pre-computed tables when available
-     */
-    private static byte getCauchyMatrixElement(int row, int col, int k) {
-        if (row == 0) {
-            // First row is all 1's for simple XOR
-            return 1;
-        } else if (row == 1 && col < 254) {
-            // Second row from pre-computed table
-            return CAUCHY_MATRIX_2[col];
-        } else if (row == 2 && col < 253) {
-            // Third row from pre-computed table
-            return CAUCHY_MATRIX_3[col];
-        } else if (row == 3 && col < 252) {
-            // Fourth row from pre-computed table
-            return CAUCHY_MATRIX_4[col];
-        } else if (row == 4 && col < 251) {
-            // Fifth row from pre-computed table
-            return CAUCHY_MATRIX_5[col];
-        } else if (row == 5 && col < 250) {
-            // Sixth row from pre-computed table
-            return CAUCHY_MATRIX_6[col];
-        } else {
-            // For other rows, calculate dynamically
-            byte x = (byte)(row + k); // Starting from k to avoid overlap with Y
-            byte y = (byte)col;
-            byte sum = GF256.add(x, y);
-            return GF256.inv(sum);
         }
     }
 
@@ -162,7 +136,7 @@ public class Cauchy256 {
         // Check parameters
         if (k <= 0 || m <= 0 || k + m > 256 || blockBytes <= 0 || blockBytes % 8 != 0) {
             throw new CauchyException.InvalidParametersException(
-                    "Invalid parameters: k=" + k + ", m=" + m + ", blockBytes=" + blockBytes);
+                    "Invalid parameters: k=%d, m=%d, blockBytes=%d".formatted(k, m, blockBytes));
         }
 
         // Check blocks array
@@ -276,10 +250,9 @@ public class Cauchy256 {
         }
 
         // OPTIMIZATION: Special case for exactly two missing blocks and both recovery blocks available
-        if (missingCount == 2 && recoveryCount >= 2 &&
-                recoveryRows[0] == 0 && recoveryRows[1] == 1) {
+        if (missingCount == 2 && recoveryRows[0] == 0 && recoveryRows[1] == 1) {
             // Direct 2x2 recovery is faster than general case
-            recoverTwoBlocks(blocks, k, blockBytes, subBytes, missingIndices, recoveryBlocks);
+            recoverTwoBlocks(blocks, k, m,  blockBytes, subBytes, missingIndices, recoveryBlocks);
             return;
         }
 
@@ -308,7 +281,7 @@ public class Cauchy256 {
                     }
 
                     if (originalData != null) {
-                        byte coefficient = getCauchyMatrixElement(recoveryRow, j, k);
+                        byte coefficient = getCauchyMatrixElement(recoveryRow, j, k,m);
 
                         if (coefficient == 1) {
                             // Simple XOR for coefficient=1
@@ -317,13 +290,13 @@ public class Cauchy256 {
                             }
                         } else if (coefficient != 0) {
                             // Bit-level approach for other coefficients
-                            byte slice = coefficient;
+                            int sliceValue = coefficient & 0xFF; // Convert to unsigned int
 
                             for (int bitY = 0; bitY < 8; bitY++) {
                                 int destOffset = bitY * subBytes;
 
                                 for (int bitX = 0; bitX < 8; bitX++) {
-                                    if ((slice & (1 << bitX)) != 0) {
+                                    if ((sliceValue & (1 << bitX)) != 0) {
                                         int srcOffset = bitX * subBytes;
 
                                         for (int p = 0; p < subBytes; p++) {
@@ -333,17 +306,20 @@ public class Cauchy256 {
                                 }
 
                                 // Next slice
-                                slice = GF256.mul(slice, (byte)2);
+                                sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
                             }
                         }
+
                     }
                 }
             }
 
             // Build the coefficient matrix for missing blocks
             for (int j = 0; j < missingCount; j++) {
-                coeffMatrix[i][j] = getCauchyMatrixElement(recoveryRow, missingIndices[j], k);
+                coeffMatrix[i][j] = getCauchyMatrixElement(recoveryRow, missingIndices[j], k,m);
             }
+
+
         }
 
         // Invert the coefficient matrix
@@ -365,13 +341,13 @@ public class Cauchy256 {
                     }
                 } else if (coefficient != 0) {
                     // Bit-level approach for other coefficients
-                    byte slice = coefficient;
+                    int sliceValue = coefficient & 0xFF; // Convert to unsigned int
 
                     for (int bitY = 0; bitY < 8; bitY++) {
                         int destOffset = bitY * subBytes;
 
                         for (int bitX = 0; bitX < 8; bitX++) {
-                            if ((slice & (1 << bitX)) != 0) {
+                            if ((sliceValue & (1 << bitX)) != 0) {
                                 int srcOffset = bitX * subBytes;
 
                                 for (int p = 0; p < subBytes; p++) {
@@ -381,7 +357,7 @@ public class Cauchy256 {
                         }
 
                         // Next slice
-                        slice = GF256.mul(slice, (byte)2);
+                        sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
                     }
                 }
             }
@@ -395,21 +371,26 @@ public class Cauchy256 {
      * Optimized method to recover exactly two missing blocks
      */
     private static void recoverTwoBlocks(
-            Block[] blocks, int k, int blockBytes, int subbytes,
+            Block[] blocks, int k,int m, int blockBytes, int subbytes,
             int[] missingIndices, Block[] recoveryBlocks) {
 
         // Create a 2x2 matrix for the system of equations
         byte[][] matrix = new byte[2][2];
         matrix[0][0] = 1;  // First recovery block, first missing block
         matrix[0][1] = 1;  // First recovery block, second missing block
-        matrix[1][0] = getCauchyMatrixElement(1, missingIndices[0], k);  // Second recovery block, first missing
-        matrix[1][1] = getCauchyMatrixElement(1, missingIndices[1], k);  // Second recovery block, second missing
+        matrix[1][0] = getCauchyMatrixElement(1, missingIndices[0], k,m);  // Second recovery block, first missing
+        matrix[1][1] = getCauchyMatrixElement(1, missingIndices[1], k,m);  // Second recovery block, second missing
 
         // Invert the 2x2 matrix (special-cased for performance)
         byte det = GF256.add(
                 GF256.mul(matrix[0][0], matrix[1][1]),
                 GF256.mul(matrix[0][1], matrix[1][0])
         );
+
+        if ((det & 0xFF) == 0) {
+            throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix - zero determinant");
+        }
+
         byte invDet = GF256.inv(det);
 
         byte[][] invMatrix = new byte[2][2];
@@ -432,21 +413,21 @@ public class Cauchy256 {
                     for (Block block : blocks) {
                         if (block != null && block.data != null && block.row == j) {
                             // Apply coefficient to original data
-                            byte coefficient = (i == 0) ? (byte)1 : getCauchyMatrixElement(1, j, k);
+                            byte coefficient = (i == 0) ? (byte)1 : getCauchyMatrixElement(1, j, k,m);
 
-                            if (coefficient == 1) {
+                            if ((coefficient & 0xFF) == 1) {
                                 // Simple XOR
                                 for (int p = 0; p < blockBytes; p++) {
                                     recoveryData[i][p] ^= block.data[p];
                                 }
-                            } else if (coefficient != 0) {
+                            } else if ((coefficient & 0xFF) != 0) {
                                 // Use bit-level operations
-                                byte slice = coefficient;
+                                int sliceValue = coefficient & 0xFF;
                                 for (int bitY = 0; bitY < 8; bitY++) {
                                     int destOffset = bitY * subbytes;
 
                                     for (int bitX = 0; bitX < 8; bitX++) {
-                                        if ((slice & (1 << bitX)) != 0) {
+                                        if ((sliceValue & (1 << bitX)) != 0) {
                                             int srcOffset = bitX * subbytes;
 
                                             for (int p = 0; p < subbytes; p++) {
@@ -456,7 +437,7 @@ public class Cauchy256 {
                                     }
 
                                     // Next slice
-                                    slice = GF256.mul(slice, (byte)2);
+                                    sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
                                 }
                             }
                             break;
@@ -473,19 +454,19 @@ public class Cauchy256 {
 
             // Apply first coefficient from inverse matrix
             byte coef1 = invMatrix[i][0];
-            if (coef1 == 1) {
+            if ((coef1 & 0xFF) == 1) {
                 // Simple XOR
                 for (int j = 0; j < blockBytes; j++) {
                     missingData[j] ^= recoveryData[0][j];
                 }
-            } else if (coef1 != 0) {
+            } else if ((coef1 & 0xFF) != 0) {
                 // Use bit-level operations
-                byte slice = coef1;
+                int sliceValue = coef1 & 0xFF;
                 for (int bitY = 0; bitY < 8; bitY++) {
                     int destOffset = bitY * subbytes;
 
                     for (int bitX = 0; bitX < 8; bitX++) {
-                        if ((slice & (1 << bitX)) != 0) {
+                        if ((sliceValue & (1 << bitX)) != 0) {
                             int srcOffset = bitX * subbytes;
 
                             for (int j = 0; j < subbytes; j++) {
@@ -495,25 +476,25 @@ public class Cauchy256 {
                     }
 
                     // Next slice
-                    slice = GF256.mul(slice, (byte)2);
+                    sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
                 }
             }
 
             // Apply second coefficient from inverse matrix
             byte coef2 = invMatrix[i][1];
-            if (coef2 == 1) {
+            if ((coef2 & 0xFF) == 1) {
                 // Simple XOR
                 for (int j = 0; j < blockBytes; j++) {
                     missingData[j] ^= recoveryData[1][j];
                 }
-            } else if (coef2 != 0) {
+            } else if ((coef2 & 0xFF) != 0) {
                 // Use bit-level operations
-                byte slice = coef2;
+                int sliceValue = coef2 & 0xFF;
                 for (int bitY = 0; bitY < 8; bitY++) {
                     int destOffset = bitY * subbytes;
 
                     for (int bitX = 0; bitX < 8; bitX++) {
-                        if ((slice & (1 << bitX)) != 0) {
+                        if ((sliceValue & (1 << bitX)) != 0) {
                             int srcOffset = bitX * subbytes;
 
                             for (int j = 0; j < subbytes; j++) {
@@ -523,7 +504,7 @@ public class Cauchy256 {
                     }
 
                     // Next slice
-                    slice = GF256.mul(slice, (byte)2);
+                    sliceValue = GF256.mul((byte)sliceValue, (byte)2) & 0xFF;
                 }
             }
 
@@ -557,30 +538,63 @@ public class Cauchy256 {
      * Inverts a square matrix in GF(256)
      */
     private static byte[][] invertMatrix(byte[][] matrix) {
+        // Your existing implementation is already good
         int size = matrix.length;
         if (size == 0 || matrix[0].length != size) {
             throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
+        }
+
+        // Special case for 2x2 matrices
+        if (size == 2) {
+            // For a 2x2 matrix [[a,b],[c,d]], the inverse is [[d,-b],[-c,a]]/(ad-bc) in GF(256)
+            byte a = matrix[0][0];
+            byte b = matrix[0][1];
+            byte c = matrix[1][0];
+            byte d = matrix[1][1];
+
+            // Calculate determinant: ad-bc in GF(256)
+            // In GF(256), subtraction is the same as addition (XOR)
+            byte det = GF256.add(
+                    GF256.mul(a, d),
+                    GF256.mul(b, c)
+            );
+
+            // Check for singularity with unsigned comparison
+            if ((det & 0xFF) == 0) {
+                throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix - zero determinant in 2x2 case");
+            }
+
+            byte invDet = GF256.inv(det);
+
+            byte[][] inverse = new byte[2][2];
+            inverse[0][0] = GF256.mul(d, invDet);
+            inverse[0][1] = GF256.mul(b, invDet);
+            inverse[1][0] = GF256.mul(c, invDet);
+            inverse[1][1] = GF256.mul(a, invDet);
+
+            return inverse;
         }
 
         // Create augmented matrix [A|I]
         byte[][] aug = new byte[size][size * 2];
         for (int i = 0; i < size; i++) {
             System.arraycopy(matrix[i], 0, aug[i], 0, size);
-            aug[i][i + size] = 1; // Identity matrix on the right
+            aug[i][i + size] = 1;
         }
 
         // Perform Gaussian elimination
         for (int i = 0; i < size; i++) {
             // Find pivot
-            int pivotRow = i;
-            for (int j = i + 1; j < size; j++) {
-                if (aug[j][i] > aug[pivotRow][i]) {
+            int pivotRow = -1;
+            for (int j = i; j < size; j++) {
+                if ((aug[j][i] & 0xFF) != 0) {
                     pivotRow = j;
+                    break;
                 }
             }
 
             // If pivot is zero, matrix is singular
-            if (aug[pivotRow][i] == 0) {
+            if (pivotRow == -1) {
                 throw new CauchyException.MatrixOperationException("Failed to invert recovery matrix");
             }
 
@@ -604,8 +618,10 @@ public class Cauchy256 {
             for (int j = 0; j < size; j++) {
                 if (j != i) {
                     byte factor = aug[j][i];
-                    for (int k = 0; k < size * 2; k++) {
-                        aug[j][k] ^= GF256.mul(aug[i][k], factor);
+                    if ((factor & 0xFF) != 0) {
+                        for (int k = 0; k < size * 2; k++) {
+                            aug[j][k] ^= GF256.mul(aug[i][k], factor);
+                        }
                     }
                 }
             }
@@ -619,6 +635,140 @@ public class Cauchy256 {
 
         return inverse;
     }
+
+    /**
+     * Gets an element from the Cauchy matrix, using pre-computed tables when available
+     * @param row Row index (0-based)
+     * @param col Column index (0-based)
+     * @param k Number of original data blocks
+     * @param m Number of recovery blocks
+     * @return The Cauchy matrix element at the specified position
+     * @throws IllegalArgumentException if the parameters are invalid or the element cannot be retrieved
+     */
+    private static byte getCauchyMatrixElement(int row, int col, int k, int m) throws IllegalArgumentException {
+        // Validate input parameters
+        if (row < 0 || col < 0 || k <= 0 || m <= 0 || k + m > 256) {
+            throw new IllegalArgumentException(
+                    "Invalid parameters: row=%d, col=%d, k=%d, m=%d".formatted(row, col, k, m));
+        }
+
+        // Ensure row and column are within bounds
+        if (row >= m) {
+            throw new IllegalArgumentException(
+                    "Row index %d is out of bounds for matrix with %d rows".formatted(row, m));
+        }
+
+        if (col >= k) {
+            throw new IllegalArgumentException(
+                    "Column index %d is out of bounds for matrix with %d columns".formatted(col, k));
+        }
+
+        // First row is all 1's for simple XOR
+        if (row == 0) {
+            return 1;
+        }
+
+        // Handle precomputed tables for m ≤ 6
+        if (m <= 6) {
+            byte[] matrixData;
+            int stride = switch (m) {
+                case 2 -> {
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_2;
+                    yield STRIDE_2;
+                }
+                case 3 -> {
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_3;
+                    yield STRIDE_3;
+                }
+                case 4 -> {
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_4;
+                    yield STRIDE_4;
+                }
+                case 5 -> {
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_5;
+                    yield STRIDE_5;
+                }
+                case 6 -> {
+                    matrixData = Cauchy256Tables.CAUCHY_MATRIX_6;
+                    yield STRIDE_6;
+                }
+                default ->
+                    // Shouldn't happen due to previous check, but handle for completeness
+                        throw new IllegalArgumentException("Unexpected value for m: %d".formatted(m));
+            };
+
+            // Select the appropriate precomputed matrix and stride
+
+            // Calculate the index in the precomputed matrix
+            int index = switch (row) {
+                case 1 -> col;
+                case 2 -> stride + col;
+                case 3 -> stride * 2 + col;
+                case 4 -> stride * 3 + col;
+                case 5 -> stride * 4 + col;
+                default -> throw new IllegalArgumentException("Unexpected value for row: %d".formatted(row));
+            };
+
+            // Check if the index is within bounds of the array
+            if (index < 0 || index >= matrixData.length) {
+                throw new IllegalArgumentException(
+                        "Index %d out of bounds for matrix data with length %d".formatted(index, matrixData.length));
+            }
+
+            return matrixData[index];
+        }
+        // Handle dynamically constructed matrix for m > 6
+        else {
+            throw new IllegalArgumentException(
+                    "Invalid value of m (should be m <= 6): %d".formatted(m));
+        }
+
+    }
+
+//    public static void printEncodingMatrix(int k, int m) {
+//        System.out.printf("Cauchy Encoding Matrix for k=%d, m=%d:%n", k, m);
+//
+//        // Print header
+//        System.out.print("    ");
+//        for (int col = 0; col < k; col++) {
+//            System.out.printf("Col%-2d ", col);
+//        }
+//        System.out.println();
+//
+//        // First row is special - all 1's
+//        System.out.print("Row0 ");
+//        for (int col = 0; col < k; col++) {
+//            System.out.printf("%-5d ", 1);
+//        }
+//        System.out.println();
+//
+//        // Print remaining rows
+//        for (int row = 1; row < m; row++) {
+//            System.out.printf("Row%-1d ", row);
+//            for (int col = 0; col < k; col++) {
+//                byte element = getCauchyMatrixElement(row, col, k, m);
+//                System.out.printf("0x%-3X ", element & 0xFF);
+//            }
+//            System.out.println();
+//        }
+//
+//        System.out.println("\nMatrix element details:");
+//        for (int row = 0; row < m; row++) {
+//            for (int col = 0; col < k; col++) {
+//                byte element = getCauchyMatrixElement(row, col, k, m);
+//
+//                // Also calculate the dynamic version for comparison
+//                byte x = (byte) (row + k);
+//                byte y = (byte) col;
+//                byte sum = GF256.add(x, y);
+//                byte dynamicElement = GF256.inv(sum);
+//
+//                System.out.printf("Element[%d][%d]: Table=0x%X, Dynamic=0x%X, Match=%b%n",
+//                        row, col, element & 0xFF, dynamicElement & 0xFF,
+//                        element == dynamicElement);
+//            }
+//        }
+//    }
 
     /**
      * Block class for data storage
